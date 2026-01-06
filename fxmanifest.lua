@@ -28,15 +28,6 @@ server_scripts {
 
 ui_page 'web/index.html'
 
-escrow_ignore {
-    -- Allow customers to customize UI/behavior without touching protected logic
-    'config.lua',
-    'locales/*.lua',
-    'client/*.lua',
-    'bridge/client.lua',
-    'web/**'
-}
-
 files {
     'web/index.html',
     'web/style.css',
