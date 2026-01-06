@@ -74,7 +74,7 @@ A: In the `config.lua` file, set `Config.Language` to either 'en' or 'sv'.
 A: Yes! The script automatically detects and works with both QBCore and ESX frameworks, using the appropriate framework based on what's running on your server.
 
 **Q: Where can I get help?**  
-A: Open a GitHub issue on our [repository](https://github.com/SwisserDev/Swisser-Bank) for support.
+A: Open a GitHub issue on our [repository](https://github.com/Ballondorina/Swiss-bank) for support.
 
 ---
 
