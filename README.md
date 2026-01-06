@@ -18,7 +18,9 @@ Special thanks to OKOK for the inspiration!
 </div>
 - **Framework:** QBCore/ESX
 - **Database:** [oxmysql](https://github.com/overextended/oxmysql)
+
 - **Library:** [ox_lib](https://github.com/overextended/ox_lib)
+
 - **Target:** [ox_target](https://github.com/overextended/ox_target)
 
 <div align="center">
