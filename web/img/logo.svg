@@ -1,0 +1,19 @@
+<svg width="1000" height="300" viewBox="0 0 1000 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon -->
+  <circle cx="140" cy="150" r="110" fill="#FF7A00" />
+  <circle cx="110" cy="120" r="18" fill="#fff"/>
+  <circle cx="170" cy="120" r="18" fill="#fff"/>
+
+  <!-- Text -->
+  <text
+    x="300"
+    y="185"
+    font-size="140"
+    font-weight="700"
+    font-family="Inter, Arial, sans-serif"
+    fill="#FF7A00"
+    letter-spacing="-2"
+  >
+    Swedbank
+  </text>
+</svg>
