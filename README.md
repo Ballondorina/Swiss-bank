@@ -77,7 +77,7 @@ A: In the `config.lua` file, set `Config.Language` to either 'en' or 'sv'.
 A: Yes! The script automatically detects and works with both QBCore and ESX frameworks, using the appropriate framework based on what's running on your server.
 
 **Q: Where can I get help?**  
-A: Open a GitHub issue on our [repository](https://github.com/Ballondorina/Swiss-bank) Or [![Discord](https://img.shields.io/discord/1437113383672483882?style=for-the-badge&logo=discord&label=Discord&color=7289DA)](https://discord.gg/e7bWGm4qrs) for support.
+A: Open a GitHub issue on our [repository](https://github.com/Ballondorina/Swiss-bank) Or [![Discord](https://img.shields.io/discord/1437113383672483882?style=for-the-badge&logo=discord&label=Discord&color=7289DA)](https://discord.gg/dHCHqRwBCk) for support.
 
 ---
 
@@ -86,5 +86,5 @@ A: Open a GitHub issue on our [repository](https://github.com/Ballondorina/Swiss
 [![GitHub license](https://img.shields.io/github/license/Ballondorina/Swiss-bank?style=for-the-badge)](https://github.com/Ballondorina/Swiss-bank/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Ballondorina/Swiss-bank?style=for-the-badge)](https://github.com/Ballondorina/Swiss-bank/stargazers)
 [![GitHub issues](https://img.shields.io/github/issues/Ballondorina/Swiss-bank?style=for-the-badge)](https://github.com/Ballondorina/Swiss-bank/issues)
-[![Discord](https://img.shields.io/discord/1437113383672483882?style=for-the-badge&logo=discord&label=Discord&color=7289DA)](https://discord.gg/e7bWGm4qrs)
+[![Discord](https://img.shields.io/discord/1437113383672483882?style=for-the-badge&logo=discord&label=Discord&color=7289DA)](https://discord.gg/dHCHqRwBCk)
 </div>
