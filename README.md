@@ -83,8 +83,8 @@ A: Open a GitHub issue on our [repository](https://github.com/Ballondorina/Swiss
 
 <div align="center">
   
-[![GitHub license](https://img.shields.io/github/license/SwisserDev/Swisser-Bank?style=for-the-badge)](https://github.com/SwisserDev/Swisser-Bank/blob/main/LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/SwisserDev/Swisser-Bank?style=for-the-badge)](https://github.com/SwisserDev/Swisser-Bank/stargazers)
-[![GitHub issues](https://img.shields.io/github/issues/SwisserDev/Swisser-Bank?style=for-the-badge)](https://github.com/SwisserDev/Swisser-Bank/issues)
+[![GitHub license](https://img.shields.io/github/license/Ballondorina/Swiss-bank?style=for-the-badge)](https://github.com/Ballondorina/Swiss-bank/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Ballondorina/Swiss-bank?style=for-the-badge)](https://github.com/Ballondorina/Swiss-bank/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/Ballondorina/Swiss-bank?style=for-the-badge)](https://github.com/Ballondorina/Swiss-bank/issues)
 
 </div>
