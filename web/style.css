@@ -275,6 +275,11 @@ body[data-theme="minimal"] #screensaver-overlay { background: rgba(5,10,8,0.85);
     width: 200px;
     height: 60px;
 }
+.logo-img {
+    width: 200px;
+    height: 60px;
+    object-fit: contain;
+}
 .logo-svg text {
     font-family: 'Space Grotesk', 'Inter', sans-serif;
 }

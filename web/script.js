@@ -166,6 +166,8 @@ let currentIbanValid = false;
 let ibanValidationTimer = null;
 let currentPageId = 'overview';
 let currentTheme = 'midnight';
+let currentLogo = null;
+let currentBranding = null;
 const quips = {
     midnight: {
         atm: [
@@ -565,6 +567,7 @@ function openBankDashboard(data, locale) {
     if (!data) return;
     currentLocale = locale || {};
     applyLocale(currentLocale);
+    applyBranding(data.branding, currentLogo);
     document.body.classList.add('bank-open');
     bankUI.style.display = 'block';
     shield.style.display = 'block'; 
@@ -635,6 +638,40 @@ function applyLocale(loc) {
     }
 }
 
+function applyBranding(branding, logoPath) {
+    if (branding) currentBranding = branding;
+    if (logoPath) currentLogo = logoPath;
+
+    const brandText = currentBranding || 'SWISSER.DEV';
+    const cardBrandEl = document.getElementById('card-brand-text');
+    if (cardBrandEl) cardBrandEl.innerText = brandText;
+
+    const atmBrandEl = document.getElementById('atm-brand');
+    if (atmBrandEl) atmBrandEl.innerText = `${brandText} ATM`;
+
+    const sidebarLogoText = document.getElementById('sidebar-logo-text');
+    if (sidebarLogoText) sidebarLogoText.innerText = brandText;
+
+    const logoImgEl = document.getElementById('bank-logo-img');
+    const logoSvgEl = document.querySelector('.sidebar-title .logo-svg');
+    if (!logoImgEl || !logoSvgEl) return;
+
+    if (!currentLogo) {
+        logoImgEl.classList.add('hidden');
+        logoSvgEl.classList.remove('hidden');
+        return;
+    }
+
+    logoImgEl.onerror = () => {
+        logoImgEl.classList.add('hidden');
+        logoSvgEl.classList.remove('hidden');
+    };
+
+    logoImgEl.src = currentLogo;
+    logoImgEl.classList.remove('hidden');
+    logoSvgEl.classList.add('hidden');
+}
+
 let lastGoalData = null;
 function updateUI(data) {
     if(!data) return;
@@ -645,6 +682,7 @@ function updateUI(data) {
     cardTiers = data.tiers || []; 
     currencySymbol = data.currency || '$';
     lastGoalData = data.goal;
+    applyBranding(data.branding, currentLogo);
 
     document.getElementById('user-name').innerText = data.name || "Unknown";
     document.getElementById('card-iban').innerText = data.iban || "SE00 0000";
@@ -1011,6 +1049,7 @@ window.addEventListener('message', (event) => {
         setTimeout(() => atmUI.classList.add('show'), 50);
     } else if (action === 'open_bank') {
         if (event.data.audio) configAudio = event.data.audio;
+        if (event.data.logo) currentLogo = event.data.logo;
         openBankDashboard(event.data.data, event.data.locale);
     } else if (action === 'DRAW_TEXT') {
         drawText(event.data.data);

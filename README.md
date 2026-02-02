@@ -31,7 +31,10 @@ A high-quality, modern banking interface featuring savings goals, custom card de
 </div>
 1. Download the resource and place it in your `resources/[custom]` folder.
 2. Import the provided `bank.sql` into your database.
-3. Ensure you have the following assets in your `web/sounds` folders:
+3. Ensure you have the following assets in your `web/sounds` folder:
+   - `click.wav`
+   - `correct.wav`
+   - `wrong.mp3`
 4. Add `ensure swisser_bank` to your `server.cfg` after `ox_lib` and `qb-core`/`es_extended`.
 
 <div align="center">
@@ -41,7 +44,7 @@ A high-quality, modern banking interface featuring savings goals, custom card de
 </div>
 - **Language:** Change `Config.Language` in `config.lua` to 'en' or 'sv'.
 - **Interactions:** The script uses `ox_target` for ATMs and Bank Teller locations.
-- **Notifications:** Choose between QBCore, ox_lib, Quasar, okok, or Brutal in `config.lua`.
+- **Notifications:** Choose between qb, ox, qs, jg, okok, mythic, or brutal in `config.lua`.
 <div align="center">
 
 ## ✨ Features

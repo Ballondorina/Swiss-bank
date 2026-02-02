@@ -8,7 +8,7 @@ Config = {}
 
 -- [CORE SETTINGS] -------------------------------------------------------------------------
 Config.Language = 'en'             -- Default language: 'en' (English) or 'sv' (Swedish)
-Config.BankLogo = 'logo.svg'       -- Path to the bank logo file in the web folder
+Config.BankLogo = 'swisser-bank-logo.svg' -- Path to the bank logo file in the web folder
 Config.ScriptBranding = "AI.SWISSER.DEV"  -- Branding text shown in the UI
 Config.DefaultPIN = "1234"         -- Default PIN for new bank accounts (users should change this)
 
@@ -29,7 +29,7 @@ Config.AvailableCurrencies = {
 }
 
 -- [NOTIFICATION & UI SETTINGS] ----------------------------------------------------------
-Config.NotifySystem = 'qb'         -- Notification system: 'qb' (QBCore) or 'esx' (ESX)
+Config.NotifySystem = 'qb'         -- Notification system: 'qb', 'ox', 'qs', 'jg', 'okok', 'mythic', or 'brutal'
 Config.TextUISystem = 'ox'         -- Text UI system (for 3D text and interactions)
 
 -- [SECURITY SETTINGS] -------------------------------------------------------------------
