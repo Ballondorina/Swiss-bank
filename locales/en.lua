@@ -59,5 +59,22 @@ Locales['en'] = {
     goal_name_label = "Goal Name (e.g. New Car)",
     goal_target_label = "Target Amount",
     save_goal = "Save Goal",
-    cancel = "Cancel"
+    cancel = "Cancel",
+
+    -- Loans
+    loans = "Loans",
+    take_loan = "Request a Loan",
+    repay_loan = "Repay Loan",
+    loan_amount = "Loan Amount",
+    loan_interest = "Interest",
+    loan_total = "Total to Repay",
+    loan_due = "Due Date",
+    no_active_loan = "No Active Loan",
+    loan_taken = "Loan of %s approved and deposited",
+    loan_repaid = "Loan of %s repaid successfully",
+    loan_insufficient = "Insufficient funds to repay loan",
+    loan_already_active = "You already have an active loan",
+    loan_max_exceeded = "Amount exceeds maximum loan limit",
+    loan_min_required = "Minimum loan amount is %s",
+    loan_disabled = "Loans are currently disabled"
 }

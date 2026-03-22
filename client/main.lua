@@ -7,8 +7,6 @@ local function L(key)
     return Locales[Config.Language][key] or key
 end
 
--- PlayerData is managed by bridge/client.lua event handlers
-
 local function OpenBankUI(isATM, isAdminDashboard)
     if isUIOpen then return end
 
@@ -52,9 +50,12 @@ RegisterNetEvent('swisser_bank:client:openAdmin', function()
     OpenBankUI(false, true)
 end)
 
--- Show server-side notifications in the client
+-- Forward server notifications to the NUI as toast messages
 RegisterNetEvent('swisser_bank:client:notify', function(notifType, message)
     if SendNotification then SendNotification(message, notifType) end
+    if isUIOpen then
+        SendNUIMessage({ action = 'NOTIFY', type = notifType, message = message })
+    end
 end)
 
 CreateThread(function()
@@ -176,4 +177,20 @@ end)
 RegisterNUICallback('markMailsRead', function(_, cb)
     TriggerServerEvent('swisser_bank:markMailsRead')
     cb('ok')
+end)
+
+-- Loan NUI callbacks
+RegisterNUICallback('getLoanData', function(_, cb)
+    local result = lib.callback.await('swisser_bank:getLoanData', false)
+    cb(result)
+end)
+
+RegisterNUICallback('takeLoan', function(data, cb)
+    local result = lib.callback.await('swisser_bank:takeLoan', false, data.amount)
+    cb(result)
+end)
+
+RegisterNUICallback('repayLoan', function(_, cb)
+    local result = lib.callback.await('swisser_bank:repayLoan', false)
+    cb(result)
 end)

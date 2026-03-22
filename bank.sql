@@ -57,3 +57,14 @@ CREATE TABLE IF NOT EXISTS `swisser_bank_avatars` (
   `url` text NOT NULL,
   PRIMARY KEY (`citizenid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 8. Loans table
+CREATE TABLE IF NOT EXISTS `swisser_bank_loans` (
+  `citizenid` varchar(50) NOT NULL,
+  `amount` int(11) NOT NULL DEFAULT 0,
+  `original_amount` int(11) NOT NULL DEFAULT 0,
+  `interest_rate` float NOT NULL DEFAULT 0.10,
+  `due_date` datetime NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`citizenid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

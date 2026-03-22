@@ -282,3 +282,76 @@ lib.callback.register('swisser_bank:getAdminData', function(source)
     -- Admin access is not yet implemented; deny all by default
     return nil
 end)
+
+-- ============================================================
+-- LOAN SYSTEM
+-- ============================================================
+
+lib.callback.register('swisser_bank:getLoanData', function(source)
+    if not Config.LoanEnabled then return nil end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return nil end
+    local loan = exports.oxmysql:single_async('SELECT * FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    if loan then
+        return {
+            active = true,
+            amount = loan.amount,
+            originalAmount = loan.original_amount,
+            interestRate = loan.interest_rate,
+            dueDate = tostring(loan.due_date),
+            createdAt = tostring(loan.created_at)
+        }
+    end
+    return {
+        active = false,
+        interestRate = Config.LoanInterestRate,
+        maxAmount = Config.MaxLoanAmount,
+        minAmount = Config.MinLoanAmount
+    }
+end)
+
+lib.callback.register('swisser_bank:takeLoan', function(source, amount)
+    if not Config.LoanEnabled then return { success = false, reason = 'loan_disabled' } end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return { success = false } end
+
+    amount = math.floor(tonumber(amount) or 0)
+    if amount < Config.MinLoanAmount then return { success = false, reason = 'min' } end
+    if amount > Config.MaxLoanAmount then return { success = false, reason = 'max' } end
+
+    -- Check for existing active loan
+    local existing = exports.oxmysql:scalar_async('SELECT citizenid FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    if existing then return { success = false, reason = 'already_active' } end
+
+    local totalOwed = math.floor(amount * (1 + Config.LoanInterestRate))
+    local dueDate = os.date('%Y-%m-%d %H:%M:%S', os.time() + (Config.LoanDurationDays * 86400))
+
+    Bridge.AdjustMoney(source, 'bank', amount, 'add', 'Bank Loan')
+    exports.oxmysql:insert('INSERT INTO swisser_bank_loans (citizenid, amount, original_amount, interest_rate, due_date) VALUES (?, ?, ?, ?, ?)', {
+        citizenid, totalOwed, amount, Config.LoanInterestRate, dueDate
+    })
+    CreateLog(citizenid, amount, 'income', 'Bank Loan', 'personal')
+    SendBankMail(citizenid, "Loan Approved", "Your loan of " .. amount .. " " .. Config.Currency .. " has been deposited. Total to repay: " .. totalOwed .. " " .. Config.Currency .. ". Due: " .. dueDate, "Loan Department")
+
+    return { success = true, amount = amount, totalOwed = totalOwed }
+end)
+
+lib.callback.register('swisser_bank:repayLoan', function(source)
+    if not Config.LoanEnabled then return { success = false } end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return { success = false } end
+
+    local loan = exports.oxmysql:single_async('SELECT * FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    if not loan then return { success = false, reason = 'no_loan' } end
+
+    if Bridge.GetBankBalance(source) < loan.amount then
+        return { success = false, reason = 'insufficient' }
+    end
+
+    Bridge.AdjustMoney(source, 'bank', loan.amount, 'remove', 'Loan Repayment')
+    exports.oxmysql:execute('DELETE FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    CreateLog(citizenid, loan.amount, 'outcome', 'Loan Repayment', 'personal')
+    SendBankMail(citizenid, "Loan Repaid", "Your loan of " .. loan.amount .. " " .. Config.Currency .. " has been fully repaid. Your account is now clear.", "Loan Department")
+
+    return { success = true, amount = loan.amount }
+end)
