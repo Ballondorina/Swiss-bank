@@ -1,5 +1,5 @@
-local Framework = nil
-local CurrentFramework = nil
+Framework = nil
+CurrentFramework = nil
 
 if GetResourceState('qb-core') == 'started' then
     Framework = exports['qb-core']:GetCoreObject()
@@ -9,7 +9,7 @@ elseif GetResourceState('es_extended') == 'started' then
     CurrentFramework = 'esx'
 end
 
-local Bridge = {}
+Bridge = {}
 
 function Bridge.GetPlayer(source)
     if CurrentFramework == 'qb' then
@@ -84,4 +84,4 @@ function Bridge.GetPlayerByCID(citizenid)
     end
 end
 
-return Bridge
+-- Bridge is global, no return needed
