@@ -1,5 +1,5 @@
-local Framework = nil
-local CurrentFramework = nil
+Framework = nil
+CurrentFramework = nil
 
 if GetResourceState('qb-core') == 'started' then
     Framework = exports['qb-core']:GetCoreObject()
@@ -9,7 +9,7 @@ elseif GetResourceState('es_extended') == 'started' then
     CurrentFramework = 'esx'
 end
 
-local Bridge = {}
+Bridge = {}
 
 function Bridge.GetPlayerData()
     if CurrentFramework == 'qb' then
@@ -36,4 +36,4 @@ RegisterNetEvent('esx:setJob', function(job)
     PlayerData.job = job
 end)
 
-return Bridge
+-- Bridge is global, no return needed

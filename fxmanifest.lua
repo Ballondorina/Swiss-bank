@@ -34,7 +34,9 @@ files {
     'web/script.js',
     'web/sounds/wrong.mp3',
     'web/sounds/correct.wav',
-    'web/sounds/click.wav'
+    'web/sounds/click.wav',
+    'web/swisser-bank-logo.svg',
+    'web/img/logo.svg'
 }
 
 lua54 'yes'

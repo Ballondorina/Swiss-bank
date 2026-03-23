@@ -4,19 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Swisser.Dev Bank</title>
-    <!-- External CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
     <link rel="stylesheet" href="style.css">
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <!-- Interaction Shield: Unlocks Audio on first click -->
-    <div id="interaction-shield" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; display: none;"></div>
+    <div id="interaction-shield"></div>
+    <div id="toast-container"></div>
 
-    <!-- DrawText UI Component -->
+    <!-- DrawText UI -->
     <div id="drawtext-container" class="drawtext-wrapper hidden">
         <div class="drawtext-content">
             <div id="drawtext-key" class="drawtext-key">E</div>
@@ -32,10 +30,7 @@
             <span class="blob blob-3"></span>
         </div>
         <div class="neon-particles">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
+            <span></span><span></span><span></span><span></span>
         </div>
         <div id="screensaver-overlay" class="hidden">
             <div class="screensaver-pattern"></div>
@@ -43,12 +38,15 @@
         </div>
         <div id="currency-rain"></div>
         <div id="confetti-layer"></div>
+
         <!-- Main Banking Dashboard -->
-        <div class="main_card animate__animated" id="bank-ui" style="display: none;">
+        <div class="main_card animate__animated" id="bank-ui" style="display:none;">
             <div class="main_card-body">
+
+                <!-- ===== SIDEBAR ===== -->
                 <div class="sidebar-container">
                     <div class="sidebar-title">
-                        <svg class="logo-svg" viewBox="0 0 220 60" xmlns="http://www.w3.org/2000/svg" aria-label="Swisser.Dev logo">
+                        <svg class="logo-svg" viewBox="0 0 220 60" xmlns="http://www.w3.org/2000/svg">
                             <defs>
                                 <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                                     <stop offset="0%" stop-color="#1f5eff"/>
@@ -61,40 +59,43 @@
                             <text x="65" y="40" fill="#ffffff" font-weight="800" font-size="28" letter-spacing="2">SWISSER.DEV</text>
                         </svg>
                     </div>
-                    
-                    <div class="sidebar-item selected" data-page="overview">
-                        <i class="fa-solid fa-house"></i> <span id="lbl-overview">Overview</span>
-                    </div>
-                    <div class="sidebar-item" data-page="transactions">
-                        <i class="fa-solid fa-receipt"></i> <span id="lbl-transactions">Transactions</span>
-                    </div>
-                    <div class="sidebar-item" data-page="transfer">
-                        <i class="fa-solid fa-paper-plane"></i> <span id="lbl-transfer">Transfer</span>
-                    </div>
-                    <div class="sidebar-item" data-page="mailbox">
-                        <i class="fa-solid fa-envelope"></i> <span id="lbl-mailbox">Mailbox</span>
-                        <span id="mail-badge" class="badge bg-danger hidden" style="margin-left: auto;">0</span>
-                    </div>
-                    <div class="sidebar-item" data-page="settings">
-                        <i class="fa-solid fa-user-shield"></i> <span id="lbl-settings">Settings</span>
-                    </div>
 
-                    <div class="mt-4">
-                        <label class="sidebar-label" id="lbl-theme">THEME</label>
-                        <select class="form-select sidebar-select" id="theme-selector">
+                    <nav class="sidebar-nav">
+                        <div class="sidebar-item selected" data-page="overview">
+                            <i class="fa-solid fa-house"></i><span id="lbl-overview">Overview</span>
+                        </div>
+                        <div class="sidebar-item" data-page="transactions">
+                            <i class="fa-solid fa-receipt"></i><span id="lbl-transactions">Transactions</span>
+                        </div>
+                        <div class="sidebar-item" data-page="transfer">
+                            <i class="fa-solid fa-paper-plane"></i><span id="lbl-transfer">Transfer</span>
+                        </div>
+                        <div class="sidebar-item" data-page="loans">
+                            <i class="fa-solid fa-hand-holding-dollar"></i><span id="lbl-loans">Loans</span>
+                            <span id="loan-badge" class="sidebar-badge loan-badge hidden">!</span>
+                        </div>
+                        <div class="sidebar-item" data-page="mailbox">
+                            <i class="fa-solid fa-envelope"></i><span id="lbl-mailbox">Mailbox</span>
+                            <span id="mail-badge" class="sidebar-badge hidden">0</span>
+                        </div>
+                        <div class="sidebar-item" data-page="settings">
+                            <i class="fa-solid fa-user-shield"></i><span id="lbl-settings">Settings</span>
+                        </div>
+                    </nav>
+
+                    <div class="sidebar-divider"></div>
+
+                    <div class="sidebar-control-group">
+                        <label class="sidebar-label">THEME</label>
+                        <select class="sidebar-select" id="theme-selector">
                             <option value="midnight">Midnight</option>
                             <option value="neon">Neon</option>
                             <option value="minimal">Minimal</option>
                         </select>
                     </div>
 
-                    <div id="account-switcher-container" class="mt-4 hidden">
-                        <label class="sidebar-label" id="lbl-select-account">SELECT ACCOUNT</label>
-                        <select class="form-select sidebar-select" id="account-selector"></select>
-                    </div>
-
-                    <div id="currency-switcher-container" class="mt-3">
-                        <label class="sidebar-label" id="lbl-currency">CURRENCY</label>
+                    <div id="currency-switcher-container" class="sidebar-control-group">
+                        <label class="sidebar-label">CURRENCY</label>
                         <div class="currency-dropdown" id="currency-dropdown">
                             <button class="currency-dropdown__toggle" id="currency-dropdown-toggle" type="button">
                                 <span id="currency-active-label">US Dollar ($)</span>
@@ -105,17 +106,23 @@
                         <select id="currency-selector" class="hidden"></select>
                     </div>
 
-                    <div style="flex: 1"></div>
+                    <div id="account-switcher-container" class="sidebar-control-group hidden">
+                        <label class="sidebar-label">ACCOUNT</label>
+                        <select class="sidebar-select" id="account-selector"></select>
+                    </div>
 
-                    <div class="sidebar-item" id="btn-exit" style="color: #ef4444; background: rgba(239, 68, 68, 0.05);">
-                        <i class="fa-solid fa-power-off"></i> <span id="lbl-exit">Logout</span>
+                    <div class="sidebar-spacer"></div>
+
+                    <div class="sidebar-item sidebar-item--exit" id="btn-exit">
+                        <i class="fa-solid fa-power-off"></i><span id="lbl-exit">Logout</span>
                     </div>
                 </div>
 
+                <!-- ===== CONTENT ===== -->
                 <div class="content-container">
                     <div class="page-title-container">
-                        <h2 id="page-title">Overview</h2>
-                        <div class="d-flex align-items-center">
+                        <h2 class="page-title" id="page-title">Overview</h2>
+                        <div class="user-header">
                             <span class="username" id="user-name">Loading...</span>
                             <div class="avatar-container">
                                 <img id="user-avatar" src="" alt="Avatar" class="user-avatar-img">
@@ -123,29 +130,71 @@
                         </div>
                     </div>
 
+                    <!-- ===== OVERVIEW PAGE ===== -->
                     <div id="page-overview" class="page-content active">
-                        <div class="row g-4">
+                        <div class="stat-row">
+                            <div class="stat-pill">
+                                <i class="fa-solid fa-wallet stat-pill__icon"></i>
+                                <div class="stat-pill__content">
+                                    <span class="stat-pill__label" id="lbl-balance">Total Balance</span>
+                                    <span class="stat-pill__value" id="display-balance">0 $</span>
+                                </div>
+                                <i class="fa-solid fa-eye-slash stat-pill__toggle" id="toggle-balance"></i>
+                            </div>
+                            <div class="stat-pill stat-pill--income">
+                                <i class="fa-solid fa-arrow-trend-up stat-pill__icon"></i>
+                                <div class="stat-pill__content">
+                                    <span class="stat-pill__label">Income (30d)</span>
+                                    <span class="stat-pill__value" id="stat-income-total">0 $</span>
+                                </div>
+                            </div>
+                            <div class="stat-pill stat-pill--outcome">
+                                <i class="fa-solid fa-arrow-trend-down stat-pill__icon"></i>
+                                <div class="stat-pill__content">
+                                    <span class="stat-pill__label">Spent (30d)</span>
+                                    <span class="stat-pill__value" id="stat-outcome-total">0 $</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
                             <div class="col-md-6">
+                                <!-- Credit Card -->
                                 <div class="creditcard-classic_card" id="credit-card-visual">
                                     <div class="card-mesh-bg" id="card-dynamic-bg"></div>
                                     <div class="card-glass-overlay"></div>
                                     <div class="holographic-strip"></div>
                                     <div class="creditcard-classic_card-body">
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <span id="card-brand-text" style="font-weight: 800; letter-spacing: 2px; font-size: 18px;">SWISSER.DEV</span>
-                                            <i class="fa-solid fa-wifi" style="font-size: 20px; opacity: 0.6;"></i>
+                                        <div class="card-top-row">
+                                            <span id="card-brand-text" class="card-brand">SWISSER.DEV</span>
+                                            <i class="fa-solid fa-wifi card-wifi-icon"></i>
+                                        </div>
+                                        <div class="card-chip">
+                                            <svg viewBox="0 0 44 34" fill="none">
+                                                <rect x="1" y="1" width="42" height="32" rx="4" fill="url(#chipGrad)" stroke="rgba(0,0,0,0.2)" stroke-width="1"/>
+                                                <defs>
+                                                    <linearGradient id="chipGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                        <stop offset="0%" stop-color="#c8963e"/>
+                                                        <stop offset="50%" stop-color="#f0c96a"/>
+                                                        <stop offset="100%" stop-color="#a97020"/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <line x1="15" y1="1" x2="15" y2="33" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>
+                                                <line x1="29" y1="1" x2="29" y2="33" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>
+                                                <line x1="1" y1="12" x2="43" y2="12" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>
+                                                <line x1="1" y1="22" x2="43" y2="22" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>
+                                                <rect x="15" y="12" width="14" height="10" rx="1" fill="rgba(0,0,0,0.08)"/>
+                                            </svg>
                                         </div>
                                         <div class="card-number-block">
-                                            <div class="card-number-display">
-                                                **** **** **** 4291
-                                            </div>
+                                            <div class="card-number-display">**** **** **** 4291</div>
                                         </div>
-                                        <div class="mt-auto d-flex justify-content-between align-items-end">
+                                        <div class="card-footer-row">
                                             <div>
-                                                <div id="lbl-card-number" style="font-size: 11px; opacity: 0.6; text-transform: uppercase; letter-spacing: 1px;">Account Number</div>
-                                                <div id="card-iban" style="font-size: 18px; font-weight: 600;">SE00 0000</div>
+                                                <div class="card-footer-label" id="lbl-card-number">Account Number</div>
+                                                <div class="card-iban-value" id="card-iban">SE00 0000</div>
                                             </div>
-                                            <div id="card-tier-label">STANDARD</div>
+                                            <div class="card-tier-badge" id="card-tier-label">STANDARD</div>
                                         </div>
                                     </div>
                                     <div class="creditcard-classic_card-back" id="card-back">
@@ -153,140 +202,243 @@
                                     </div>
                                 </div>
                             </div>
+
                             <div class="col-md-6">
-                                <div class="card balance-card">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div style="font-size: 16px; opacity: 0.5; font-weight: 600;" id="lbl-balance">Total Balance</div>
-                                        <i class="fa-solid fa-eye-slash" id="toggle-balance" style="cursor: pointer; opacity: 0.5; font-size: 18px;"></i>
-                                    </div>
-                                    <h1 id="display-balance">0 kr</h1>
-                                    <div class="row mt-4 g-3">
-                                        <div class="col-6">
+                                <!-- Balance & Actions -->
+                                <div class="balance-card">
+                                    <div class="balance-card__actions">
+                                        <div class="action-group deposit-group">
+                                            <div class="action-group-label">DEPOSIT</div>
                                             <input type="text" class="form-control" id="inp-deposit" placeholder="Amount" inputmode="numeric" pattern="[0-9,]*">
-                                            <button class="btn btn-blue" id="btn-deposit">Deposit</button>
+                                            <button class="btn btn-action btn-deposit-action" id="btn-deposit">
+                                                <i class="fa-solid fa-plus"></i> Deposit
+                                            </button>
                                         </div>
-                                        <div class="col-6">
+                                        <div class="action-group withdraw-group">
+                                            <div class="action-group-label">WITHDRAW</div>
                                             <input type="text" class="form-control" id="inp-withdraw" placeholder="Amount" inputmode="numeric" pattern="[0-9,]*">
-                                            <button class="btn btn-blue" id="btn-withdraw" style="background: #2a2b33;">Withdraw</button>
+                                            <button class="btn btn-action btn-withdraw-action" id="btn-withdraw">
+                                                <i class="fa-solid fa-minus"></i> Withdraw
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="row mt-5">
+
+                        <div class="row mt-3 g-3">
                             <div class="col-md-8">
-                                <h4 id="lbl-analysis-title" style="font-weight: 800; margin-bottom: 20px; opacity: 0.8;">Financial Analysis</h4>
-                                <div style="background: #1f2027; border-radius: 20px; padding: 25px; height: 280px; border: 1px solid rgba(255,255,255,0.03);">
+                                <div class="section-header">
+                                    <h4 class="section-title" id="lbl-analysis-title">Financial Analysis</h4>
+                                </div>
+                                <div class="chart-container">
                                     <canvas id="transactionChart"></canvas>
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <h4 id="lbl-savings-goal-title" style="font-weight: 800; margin-bottom: 20px; opacity: 0.8;">Savings Goal</h4>
-                                <div class="card goal-card" style="background: #1f2027; border-radius: 20px; padding: 25px; border: 1px solid rgba(255,255,255,0.03); height: 280px; display: flex; flex-direction: column;">
-                                    <div id="goal-title" style="font-size: 20px; font-weight: 700;">Goal Name</div>
-                                    <div class="progress mt-4" style="height: 12px; border-radius: 10px; background: rgba(255,255,255,0.05);">
-                                        <div id="goal-progress-bar" class="progress-bar" role="progressbar" style="width: 0%; background: #1f5eff; border-radius: 10px;"></div>
+                                <div class="section-header">
+                                    <h4 class="section-title" id="lbl-savings-goal-title">Savings Goal</h4>
+                                    <button class="icon-btn" id="btn-goal-settings" onclick="toggleGoalEdit()">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </button>
+                                </div>
+                                <div class="goal-card">
+                                    <div class="goal-card__title" id="goal-title">Goal Name</div>
+                                    <div class="goal-progress-track">
+                                        <div id="goal-progress-bar" class="goal-progress-bar" role="progressbar" style="width:0%"></div>
                                     </div>
-                                    <div class="d-flex justify-content-between mt-3">
-                                        <span id="goal-current" style="font-size: 18px; font-weight: 700;">0 kr</span>
-                                        <span id="goal-target" style="opacity: 0.4;">/ 0 kr</span>
-                                    </div>
-                                    <div class="mt-auto">
-                                        <button class="btn btn-blue" id="btn-goal-settings" style="background: rgba(255,255,255,0.05); color: white;" onclick="toggleGoalEdit()">Settings</button>
+                                    <div class="goal-card__amounts">
+                                        <span class="goal-current" id="goal-current">0 $</span>
+                                        <span class="goal-target" id="goal-target">/ —</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
+                    <!-- ===== TRANSACTIONS PAGE ===== -->
                     <div id="page-transactions" class="page-content hidden">
                         <div class="transaction-scroll-area" id="transaction-list"></div>
                     </div>
 
+                    <!-- ===== TRANSFER PAGE ===== -->
                     <div id="page-transfer" class="page-content hidden">
-                        <div class="row justify-content-center">
-                            <div class="col-md-8">
-                                <div class="card p-5" style="background: #1f2027; border-radius: 25px; border: 1px solid rgba(255,255,255,0.03);">
-                                    <h3 id="lbl-quick-transfer" style="font-weight: 800; margin-bottom: 30px;">Quick Transfer</h3>
-                                    <div class="mb-4">
-                                        <label class="form-label" id="lbl-transfer-iban" style="opacity: 0.5;">Recipient IBAN / Account Number</label>
-                                        <input type="text" class="form-control" id="inp-transfer-iban" placeholder="SE00 0000...">
-                                        <div id="iban-feedback" class="form-text muted-text"></div>
+                        <div class="transfer-layout">
+                            <div class="transfer-card">
+                                <h3 class="transfer-card__title" id="lbl-quick-transfer">Quick Transfer</h3>
+
+                                <!-- Recipient preview (shown after IBAN validates) -->
+                                <div id="recipient-preview" class="recipient-preview hidden">
+                                    <div class="recipient-avatar" id="recipient-initials">??</div>
+                                    <div class="recipient-info">
+                                        <div class="recipient-name" id="recipient-name-display">—</div>
+                                        <div class="recipient-iban-text" id="recipient-iban-display">—</div>
                                     </div>
-                                    <div class="mb-4">
-                                        <label class="form-label" id="lbl-transfer-amount" style="opacity: 0.5;">Amount to send</label>
-                                        <input type="number" class="form-control" id="inp-transfer-amount" placeholder="0">
-                                    </div>
-                                    <button class="btn btn-blue mt-3 disabled" id="btn-transfer" disabled>Send Funds</button>
+                                    <i class="fa-solid fa-circle-check recipient-verified"></i>
                                 </div>
+
+                                <!-- Quick contacts -->
+                                <div id="quick-contacts-row" class="quick-contacts hidden">
+                                    <div class="quick-contacts__label">Recent</div>
+                                    <div class="quick-contacts__chips" id="quick-contacts-chips"></div>
+                                </div>
+
+                                <div class="form-group-block">
+                                    <label class="form-label muted-label" id="lbl-transfer-iban">Recipient IBAN / Account Number</label>
+                                    <input type="text" class="form-control" id="inp-transfer-iban" placeholder="SE00 0000...">
+                                    <div id="iban-feedback" class="form-text"></div>
+                                </div>
+                                <div class="form-group-block">
+                                    <label class="form-label muted-label" id="lbl-transfer-amount">Amount to send</label>
+                                    <input type="text" class="form-control" id="inp-transfer-amount" placeholder="0" inputmode="numeric" pattern="[0-9,]*">
+                                </div>
+                                <button class="btn btn-blue btn-full disabled" id="btn-transfer" disabled>
+                                    <i class="fa-solid fa-paper-plane"></i> Send Funds
+                                </button>
                             </div>
                         </div>
                     </div>
 
+                    <!-- ===== LOANS PAGE ===== -->
+                    <div id="page-loans" class="page-content hidden">
+                        <div class="loans-layout">
+
+                            <!-- Active loan card (shown when loan exists) -->
+                            <div id="active-loan-card" class="loan-status-card hidden">
+                                <div class="loan-status-card__header">
+                                    <div>
+                                        <div class="loan-status-label">Outstanding Balance</div>
+                                        <div class="loan-status-amount" id="loan-amount-display">0 $</div>
+                                    </div>
+                                    <div class="loan-status-right">
+                                        <div class="loan-due-label">Due date</div>
+                                        <div class="loan-due-date" id="loan-due-display">—</div>
+                                    </div>
+                                </div>
+                                <div class="loan-progress-track">
+                                    <div class="loan-progress-bar" id="loan-progress-bar" style="width:100%"></div>
+                                </div>
+                                <div class="loan-status-card__footer">
+                                    <span class="loan-interest-badge" id="loan-interest-badge">
+                                        <i class="fa-solid fa-percent"></i> <span id="loan-rate-text">10% interest</span>
+                                    </span>
+                                    <button class="btn btn-repay" id="btn-repay-loan">
+                                        <i class="fa-solid fa-circle-dollar-to-slot"></i> Repay Loan
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- No active loan placeholder -->
+                            <div id="no-loan-card" class="no-loan-card">
+                                <div class="no-loan-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+                                <div class="no-loan-title">No Active Loan</div>
+                                <div class="no-loan-sub">Borrow money instantly and repay with interest.</div>
+                            </div>
+
+                            <!-- Loan request form -->
+                            <div class="loan-form-card" id="loan-form-card">
+                                <h4 class="loan-form-title" id="lbl-take-loan">Request a Loan</h4>
+                                <div class="loan-presets" id="loan-presets">
+                                    <button class="loan-preset-btn" data-amount="10000">$10K</button>
+                                    <button class="loan-preset-btn" data-amount="25000">$25K</button>
+                                    <button class="loan-preset-btn" data-amount="50000">$50K</button>
+                                    <button class="loan-preset-btn" data-amount="100000">$100K</button>
+                                </div>
+                                <div class="form-group-block">
+                                    <label class="form-label muted-label">Loan Amount</label>
+                                    <input type="text" class="form-control" id="inp-loan-amount" placeholder="Enter amount..." inputmode="numeric" pattern="[0-9,]*">
+                                </div>
+                                <div class="loan-summary" id="loan-summary">
+                                    <div class="loan-summary-row">
+                                        <span>Principal</span>
+                                        <span id="loan-summary-principal">—</span>
+                                    </div>
+                                    <div class="loan-summary-row">
+                                        <span>Interest (<span id="loan-summary-rate">10</span>%)</span>
+                                        <span class="loan-summary-interest" id="loan-summary-interest">—</span>
+                                    </div>
+                                    <div class="loan-summary-row loan-summary-row--total">
+                                        <span>Total to repay</span>
+                                        <span id="loan-summary-total">—</span>
+                                    </div>
+                                </div>
+                                <button class="btn btn-blue btn-full" id="btn-take-loan">
+                                    <i class="fa-solid fa-hand-holding-dollar"></i> Request Loan
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== MAILBOX PAGE ===== -->
                     <div id="page-mailbox" class="page-content hidden">
                         <div id="mail-list" class="transaction-scroll-area"></div>
                     </div>
 
+                    <!-- ===== SETTINGS PAGE ===== -->
                     <div id="page-settings" class="page-content hidden">
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <div class="card p-4" style="background: #1f2027; border-radius: 20px; border: 1px solid rgba(255,255,255,0.03);">
-                                    <h4 id="lbl-security-title" style="font-weight: 800; margin-bottom: 20px;">Security Code</h4>
-                                    <p id="lbl-pin-warning" style="font-size: 13px; color: #ef4444; margin-bottom: 20px;"></p>
-                                    <input type="password" class="form-control" id="inp-current-pin" placeholder="Current PIN">
-                                    <input type="password" class="form-control" id="inp-new-pin" placeholder="New PIN (4 digits)">
-                                    <input type="password" class="form-control" id="inp-confirm-pin" placeholder="Confirm new PIN">
-                                    <button class="btn btn-blue mt-3" id="btn-change-pin">Update Code</button>
+                        <div class="settings-grid">
+                            <div class="settings-card">
+                                <div class="settings-card__header">
+                                    <h4 id="lbl-security-title">Security Code</h4>
+                                    <span class="cost-badge"><i class="fa-solid fa-coins"></i> <span id="lbl-pin-cost">1,000</span></span>
                                 </div>
+                                <p id="lbl-pin-warning" class="settings-warning"></p>
+                                <input type="password" class="form-control" id="inp-current-pin" placeholder="Current PIN">
+                                <input type="password" class="form-control" id="inp-new-pin" placeholder="New PIN (4 digits)">
+                                <input type="password" class="form-control" id="inp-confirm-pin" placeholder="Confirm new PIN">
+                                <button class="btn btn-blue btn-full" id="btn-change-pin">Update Code</button>
                             </div>
-                            <div class="col-md-6">
-                                <div class="card p-4" style="background: #1f2027; border-radius: 20px; border: 1px solid rgba(255,255,255,0.03);">
-                                    <h4 id="lbl-card-design-title" style="font-weight: 800; margin-bottom: 20px;">Card Design</h4>
-                                    <p id="lbl-card-cost" style="font-size: 13px; color: #ef4444; margin-bottom: 20px;"></p>
-                                    <input type="text" class="form-control" id="inp-card-url" placeholder="Image URL (Direct link)">
-                                    <button class="btn btn-blue mt-3" id="btn-order-card">Order New Design</button>
-                                    <button class="btn btn-secondary w-100 mt-2 hidden" id="btn-remove-card" style="background: transparent; border: 1px solid rgba(255,255,255,0.1);">Reset Default</button>
+                            <div class="settings-card">
+                                <div class="settings-card__header">
+                                    <h4 id="lbl-card-design-title">Card Design</h4>
+                                    <span class="cost-badge"><i class="fa-solid fa-coins"></i> <span id="lbl-card-cost">5,000</span></span>
                                 </div>
+                                <input type="text" class="form-control" id="inp-card-url" placeholder="Image URL (Direct link)">
+                                <button class="btn btn-blue btn-full" id="btn-order-card">Order New Design</button>
+                                <button class="btn btn-ghost btn-full hidden" id="btn-remove-card">Reset Default</button>
                             </div>
-                            <div class="col-md-6">
-                                <div class="card p-4" style="background: #1f2027; border-radius: 20px; border: 1px solid rgba(255,255,255,0.03);">
-                                    <h4 id="lbl-avatar-title" style="font-weight: 800; margin-bottom: 20px;">Profile Picture</h4>
-                                    <input type="text" class="form-control" id="inp-avatar-url" placeholder="Image URL">
-                                    <button class="btn btn-blue mt-3" id="btn-update-avatar">Update Avatar</button>
-                                    <button class="btn btn-secondary w-100 mt-2 hidden" id="btn-remove-avatar" style="background: transparent; border: 1px solid rgba(255,255,255,0.1);">Reset Default</button>
+                            <div class="settings-card">
+                                <div class="settings-card__header">
+                                    <h4 id="lbl-avatar-title">Profile Picture</h4>
+                                    <span class="cost-badge"><i class="fa-solid fa-coins"></i> <span id="lbl-avatar-cost">2,500</span></span>
                                 </div>
+                                <input type="text" class="form-control" id="inp-avatar-url" placeholder="Image URL">
+                                <button class="btn btn-blue btn-full" id="btn-update-avatar">Update Avatar</button>
+                                <button class="btn btn-ghost btn-full hidden" id="btn-remove-avatar">Reset Default</button>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
+                </div><!-- end content-container -->
+            </div><!-- end main_card-body -->
+        </div><!-- end bank-ui -->
 
-        <!-- Savings Goal Modal -->
+        <!-- ===== SAVINGS GOAL MODAL ===== -->
         <div id="goal-modal" class="modal-overlay hidden">
             <div class="modal-content animate__animated animate__zoomIn">
-                <h3 id="lbl-update-goal-title" style="font-weight: 800; margin-bottom: 25px;">Update Savings Goal</h3>
-                <div class="mb-4">
-                    <label class="form-label" id="lbl-goal-name" style="opacity: 0.5;">Goal Name</label>
+                <h3 class="modal-title" id="lbl-update-goal-title">Update Savings Goal</h3>
+                <div class="form-group-block">
+                    <label class="form-label muted-label" id="lbl-goal-name">Goal Name</label>
                     <input type="text" class="form-control" id="inp-goal-title" placeholder="e.g. New Car">
                 </div>
-                <div class="mb-4">
-                    <label class="form-label" id="lbl-goal-target" style="opacity: 0.5;">Target Amount</label>
+                <div class="form-group-block">
+                    <label class="form-label muted-label" id="lbl-goal-target">Target Amount</label>
                     <input type="number" class="form-control" id="inp-goal-target" placeholder="0">
                 </div>
-                <div class="d-flex gap-3">
-                    <button class="btn btn-blue flex-grow-1" id="btn-save-goal" onclick="saveGoal()">Save Goal</button>
-                    <button class="btn btn-secondary" id="btn-cancel-goal" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);" onclick="toggleGoalEdit()">Cancel</button>
+                <div class="modal-actions">
+                    <button class="btn btn-blue flex-1" id="btn-save-goal" onclick="saveGoal()">Save Goal</button>
+                    <button class="btn btn-ghost" id="btn-cancel-goal" onclick="toggleGoalEdit()">Cancel</button>
                 </div>
             </div>
         </div>
 
-        <!-- ATM PIN Pad Interface -->
-        <div id="atm-container" style="display: none;">
+        <!-- ===== ATM PIN PAD ===== -->
+        <div id="atm-container" style="display:none;">
             <div class="atm_card animate__animated" id="atm-ui">
                 <div class="atm-vignette" id="atm-vignette"></div>
-                <div class="atm-brand">ATM TERMINAL</div>
+                <div class="atm-header">
+                    <div class="atm-brand-main">SWISS BANK</div>
+                    <div class="atm-brand-sub">SECURE ACCESS</div>
+                </div>
                 <div class="dots-container">
                     <div class="dot" id="dot-1"></div>
                     <div class="dot" id="dot-2"></div>
@@ -310,7 +462,8 @@
                 </div>
             </div>
         </div>
-    </div>
+
+    </div><!-- end app -->
     <script src="script.js"></script>
 </body>
 </html>

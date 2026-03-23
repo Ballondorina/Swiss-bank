@@ -1,14 +1,14 @@
-local QBCore = exports['qb-core']:GetCoreObject()
 local dbReady = false
 local Cooldowns = {}
 
 local function GenerateAccountNumber()
-    local number = tostring(math.random(111111, 999999))
-    local check = exports.oxmysql:scalar_async('SELECT citizenid FROM swisser_bank_pins WHERE account_no = ?', { number })
-    if check then
-        return GenerateAccountNumber()
+    for _ = 1, 100 do
+        local number = tostring(math.random(111111, 999999))
+        local check = exports.oxmysql:scalar_async('SELECT citizenid FROM swisser_bank_pins WHERE account_no = ?', { number })
+        if not check then return number end
     end
-    return number
+    -- Fallback: use time-based number if all random attempts collide
+    return tostring((os.time() % 900000) + 100000)
 end
 
 local function GetUserAccountNumber(citizenid)
@@ -20,7 +20,7 @@ local function GetUserAccountNumber(citizenid)
         return result.account_no
     else
         local newAcc = GenerateAccountNumber()
-        exports.oxmysql:execute('INSERT INTO swisser_bank_pins (citizenid, pin, account_no) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE account_no = ?', {
+        exports.oxmysql:execute('INSERT INTO swisser_bank_pins (citizenid, pin, account_no) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE account_no = COALESCE(account_no, ?)', {
             citizenid, Config.DefaultPIN, newAcc, newAcc
         })
         return newAcc
@@ -36,7 +36,7 @@ local function VerifyBankAccess(source)
             return true
         end
     end
-    return true 
+    return false
 end
 
 local function CheckCooldown(source)
@@ -70,27 +70,24 @@ end)
 -- Validation Callback for IBAN (Transfer Feedback)
 lib.callback.register('swisser_bank:validateIBAN', function(source, iban)
     if not iban or iban == "" then return { valid = false } end
-    
+
     local result = exports.oxmysql:single_async([[
-        SELECT p.citizenid, JSON_VALUE(pl.charinfo, '$.firstname') as fname, JSON_VALUE(pl.charinfo, '$.lastname') as lname 
-        FROM swisser_bank_pins p 
-        LEFT JOIN players pl ON p.citizenid = pl.citizenid 
+        SELECT p.citizenid, JSON_VALUE(pl.charinfo, '$.firstname') as fname, JSON_VALUE(pl.charinfo, '$.lastname') as lname
+        FROM swisser_bank_pins p
+        LEFT JOIN players pl ON p.citizenid = pl.citizenid
         WHERE p.account_no = ?
     ]], { iban })
 
     if result then
-        return { 
-            valid = true, 
-            name = result.fname .. " " .. result.lname 
-        }
+        local name = ((result.fname or '') .. ' ' .. (result.lname or '')):match('^%s*(.-)%s*$')
+        return { valid = true, name = name }
     end
     return { valid = false }
 end)
 
 lib.callback.register('swisser_bank:checkPIN', function(source, inputPin)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then return false end
-    local citizenid = Player.PlayerData.citizenid
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return false end
     local result = exports.oxmysql:scalar_async('SELECT pin FROM swisser_bank_pins WHERE citizenid = ?', { citizenid })
     local actualPin = result or Config.DefaultPIN
     if not result then GetUserAccountNumber(citizenid) end
@@ -98,12 +95,11 @@ lib.callback.register('swisser_bank:checkPIN', function(source, inputPin)
 end)
 
 lib.callback.register('swisser_bank:getData', function(source, accountType)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player or not VerifyBankAccess(source) then return nil end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not VerifyBankAccess(source) then return nil end
 
-    local citizenid = Player.PlayerData.citizenid
     local account = accountType or 'personal'
-    
+
     local transactions = exports.oxmysql:query_async('SELECT * FROM swisser_bank_transactions WHERE citizenid = ? AND account = ? ORDER BY date DESC LIMIT 10', { citizenid, account })
     local mails = exports.oxmysql:query_async('SELECT * FROM swisser_bank_mails WHERE citizenid = ? ORDER BY date DESC LIMIT 20', { citizenid })
     local goal = exports.oxmysql:single_async('SELECT * FROM swisser_bank_goals WHERE citizenid = ?', { citizenid }) or { title = "Savings Goal", target = 0 }
@@ -112,9 +108,9 @@ lib.callback.register('swisser_bank:getData', function(source, accountType)
     local shortAccount = GetUserAccountNumber(citizenid)
 
     return {
-        balance = Player.PlayerData.money.bank,
-        name = Player.PlayerData.charinfo.firstname .. ' ' .. Player.PlayerData.charinfo.lastname,
-        iban = shortAccount, 
+        balance = Bridge.GetBankBalance(source),
+        name = Bridge.GetName(source),
+        iban = shortAccount,
         transactions = transactions or {},
         mails = mails or {},
         currentAccount = account,
@@ -135,79 +131,108 @@ end)
 RegisterNetEvent('swisser_bank:deposit', function(amount, accountType)
     local src = source
     if not CheckCooldown(src) or not VerifyBankAccess(src) then return end
-    local Player = QBCore.Functions.GetPlayer(src)
+    local citizenid = Bridge.GetIdentifier(src)
     amount = math.floor(tonumber(amount) or 0)
-    if not Player or amount <= 0 then return end
+    if not citizenid or amount <= 0 or amount > 10000000 then return end
 
-    if Player.Functions.RemoveMoney('cash', amount, 'Bank Deposit') then
-        Player.Functions.AddMoney('bank', amount, 'Bank Deposit')
-        CreateLog(Player.PlayerData.citizenid, amount, 'income', 'Bank Deposit', 'personal')
+    if Bridge.AdjustMoney(src, 'cash', amount, 'remove', 'Bank Deposit') then
+        Bridge.AdjustMoney(src, 'bank', amount, 'add', 'Bank Deposit')
+        CreateLog(citizenid, amount, 'income', 'Bank Deposit', 'personal')
+        TriggerClientEvent('swisser_bank:client:notify', src, 'success', 'Deposited ' .. amount .. ' ' .. Config.Currency)
+    else
+        TriggerClientEvent('swisser_bank:client:notify', src, 'error', 'Insufficient cash for deposit')
     end
 end)
 
 RegisterNetEvent('swisser_bank:withdraw', function(amount, accountType)
     local src = source
     if not CheckCooldown(src) or not VerifyBankAccess(src) then return end
-    local Player = QBCore.Functions.GetPlayer(src)
+    local citizenid = Bridge.GetIdentifier(src)
     amount = math.floor(tonumber(amount) or 0)
-    if not Player or amount <= 0 then return end
+    if not citizenid or amount <= 0 or amount > 10000000 then return end
 
-    if Player.Functions.RemoveMoney('bank', amount, 'Bank Withdraw') then
-        Player.Functions.AddMoney('cash', amount, 'Bank Withdraw')
-        CreateLog(Player.PlayerData.citizenid, amount, 'outcome', 'Bank Withdraw', 'personal')
+    if Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Bank Withdraw') then
+        Bridge.AdjustMoney(src, 'cash', amount, 'add', 'Bank Withdraw')
+        CreateLog(citizenid, amount, 'outcome', 'Bank Withdraw', 'personal')
+        TriggerClientEvent('swisser_bank:client:notify', src, 'success', 'Withdrew ' .. amount .. ' ' .. Config.Currency)
+    else
+        TriggerClientEvent('swisser_bank:client:notify', src, 'error', 'Insufficient funds for withdrawal')
     end
 end)
 
 RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountType)
     local src = source
     if not CheckCooldown(src) or not VerifyBankAccess(src) then return end
-    local Player = QBCore.Functions.GetPlayer(src)
+    local citizenid = Bridge.GetIdentifier(src)
     amount = math.floor(tonumber(amount) or 0)
-    if not Player or amount <= 0 then return end
-    if Player.PlayerData.money.bank < amount then return end
+    if not citizenid or amount <= 0 or amount > 10000000 then return end
+    if Bridge.GetBankBalance(src) < amount then return end
 
     local targetData = exports.oxmysql:single_async('SELECT citizenid FROM swisser_bank_pins WHERE account_no = ?', { accountNo })
-    if not targetData then return end 
+    if not targetData then return end
+    if targetData.citizenid == citizenid then return end -- Prevent self-transfer
 
-    local targetPlayer = QBCore.Functions.GetPlayerByCitizenId(targetData.citizenid)
-    local myShortAccount = GetUserAccountNumber(Player.PlayerData.citizenid)
+    local myShortAccount = GetUserAccountNumber(citizenid)
+    local targetSrc = Bridge.GetPlayerByCID(targetData.citizenid)
 
-    if targetPlayer then
-        if targetPlayer.PlayerData.citizenid == Player.PlayerData.citizenid then return end
-        Player.Functions.RemoveMoney('bank', amount, 'Transfer Sent')
-        targetPlayer.Functions.AddMoney('bank', amount, 'Transfer Received')
-        CreateLog(Player.PlayerData.citizenid, amount, 'outcome', 'To: '..accountNo, 'personal')
-        CreateLog(targetPlayer.PlayerData.citizenid, amount, 'income', 'From: '..myShortAccount, 'personal')
-        SendBankMail(targetPlayer.PlayerData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency, "Wire Transfer")
+    if targetSrc then
+        -- Online player transfer
+        Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Transfer Sent')
+        Bridge.AdjustMoney(targetSrc, 'bank', amount, 'add', 'Transfer Received')
+        CreateLog(citizenid, amount, 'outcome', 'To: ' .. accountNo, 'personal')
+        CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. myShortAccount, 'personal')
+        SendBankMail(targetData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency, "Wire Transfer")
     else
-        local offlineTarget = exports.oxmysql:single_async('SELECT money FROM players WHERE citizenid = ?', { targetData.citizenid })
-        if offlineTarget then
-            local money = json.decode(offlineTarget.money)
-            money.bank = money.bank + amount
-            Player.Functions.RemoveMoney('bank', amount, 'Transfer Sent')
-            exports.oxmysql:execute('UPDATE players SET money = ? WHERE citizenid = ?', { json.encode(money), targetData.citizenid })
-            CreateLog(Player.PlayerData.citizenid, amount, 'outcome', 'To: '..accountNo, 'personal')
-            CreateLog(targetData.citizenid, amount, 'income', 'From: '..myShortAccount, 'personal')
-            SendBankMail(targetData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency .. " while you were away.", "Wire Transfer")
+        -- Offline player transfer
+        if CurrentFramework == 'qb' then
+            local offlineTarget = exports.oxmysql:single_async('SELECT money FROM players WHERE citizenid = ?', { targetData.citizenid })
+            if offlineTarget then
+                local money = json.decode(offlineTarget.money)
+                money.bank = money.bank + amount
+                Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Transfer Sent')
+                exports.oxmysql:execute('UPDATE players SET money = ? WHERE citizenid = ?', { json.encode(money), targetData.citizenid })
+                CreateLog(citizenid, amount, 'outcome', 'To: ' .. accountNo, 'personal')
+                CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. myShortAccount, 'personal')
+                SendBankMail(targetData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency .. " while you were away.", "Wire Transfer")
+            end
+        elseif CurrentFramework == 'esx' then
+            local offlineBalance = exports.oxmysql:scalar_async('SELECT `bank` FROM `users` WHERE `identifier` = ?', { targetData.citizenid })
+            if offlineBalance ~= nil then
+                Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Transfer Sent')
+                exports.oxmysql:execute('UPDATE `users` SET `bank` = `bank` + ? WHERE `identifier` = ?', { amount, targetData.citizenid })
+                CreateLog(citizenid, amount, 'outcome', 'To: ' .. accountNo, 'personal')
+                CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. myShortAccount, 'personal')
+                SendBankMail(targetData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency .. " while you were away.", "Wire Transfer")
+            end
         end
     end
 end)
 
 lib.callback.register('swisser_bank:updateGoal', function(source, data)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player then return false end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return false end
     exports.oxmysql:execute('INSERT INTO swisser_bank_goals (citizenid, title, target) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE title = ?, target = ?', {
-        Player.PlayerData.citizenid, data.title, data.target, data.title, data.target
+        citizenid, data.title, data.target, data.title, data.target
     })
     return true
 end)
 
 lib.callback.register('swisser_bank:changePIN', function(source, data)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player or not CheckCooldown(source) then return false end
-    if Player.Functions.RemoveMoney('bank', Config.PINChangeCost, 'Bank PIN Change') then
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return false end
+
+    -- Validate new PIN format: must be exactly 4 digits
+    local newPin = tostring(data.newPin or '')
+    if #newPin ~= 4 or not newPin:match('^%d+$') then return false end
+
+    -- Verify the current PIN before allowing the change
+    local storedPin = exports.oxmysql:scalar_async('SELECT pin FROM swisser_bank_pins WHERE citizenid = ?', { citizenid })
+    local actualPin = storedPin or Config.DefaultPIN
+    if tostring(data.currentPin) ~= tostring(actualPin) then return false end
+
+    if Bridge.AdjustMoney(source, 'bank', Config.PINChangeCost, 'remove', 'Bank PIN Change') then
         exports.oxmysql:execute('UPDATE swisser_bank_pins SET pin = ? WHERE citizenid = ?', {
-            data.newPin, Player.PlayerData.citizenid
+            newPin, citizenid
         })
         return true
     end
@@ -215,15 +240,15 @@ lib.callback.register('swisser_bank:changePIN', function(source, data)
 end)
 
 lib.callback.register('swisser_bank:updateCard', function(source, url)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player or not CheckCooldown(source) then return false end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return false end
     if url == "REMOVE" then
-        exports.oxmysql:execute('DELETE FROM swisser_bank_cards WHERE citizenid = ?', { Player.PlayerData.citizenid })
+        exports.oxmysql:execute('DELETE FROM swisser_bank_cards WHERE citizenid = ?', { citizenid })
         return true
     end
-    if Player.Functions.RemoveMoney('bank', Config.CustomCardCost, 'Custom Card Design') then
+    if Bridge.AdjustMoney(source, 'bank', Config.CustomCardCost, 'remove', 'Custom Card Design') then
         exports.oxmysql:execute('INSERT INTO swisser_bank_cards (citizenid, url) VALUES (?, ?) ON DUPLICATE KEY UPDATE url = ?', {
-            Player.PlayerData.citizenid, url, url
+            citizenid, url, url
         })
         return true
     end
@@ -231,15 +256,15 @@ lib.callback.register('swisser_bank:updateCard', function(source, url)
 end)
 
 lib.callback.register('swisser_bank:updateAvatar', function(source, url)
-    local Player = QBCore.Functions.GetPlayer(source)
-    if not Player or not CheckCooldown(source) then return false end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return false end
     if url == "REMOVE" then
-        exports.oxmysql:execute('DELETE FROM swisser_bank_avatars WHERE citizenid = ?', { Player.PlayerData.citizenid })
+        exports.oxmysql:execute('DELETE FROM swisser_bank_avatars WHERE citizenid = ?', { citizenid })
         return true
     end
-    if Player.Functions.RemoveMoney('bank', Config.AvatarChangeCost, 'Custom Bank Avatar') then
+    if Bridge.AdjustMoney(source, 'bank', Config.AvatarChangeCost, 'remove', 'Custom Bank Avatar') then
         exports.oxmysql:execute('INSERT INTO swisser_bank_avatars (citizenid, url) VALUES (?, ?) ON DUPLICATE KEY UPDATE url = ?', {
-            Player.PlayerData.citizenid, url, url
+            citizenid, url, url
         })
         return true
     end
@@ -248,7 +273,85 @@ end)
 
 RegisterNetEvent('swisser_bank:markMailsRead', function()
     local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
-    exports.oxmysql:execute('UPDATE swisser_bank_mails SET is_read = 1 WHERE citizenid = ?', { Player.PlayerData.citizenid })
+    local citizenid = Bridge.GetIdentifier(src)
+    if not citizenid then return end
+    exports.oxmysql:execute('UPDATE swisser_bank_mails SET is_read = 1 WHERE citizenid = ?', { citizenid })
+end)
+
+lib.callback.register('swisser_bank:getAdminData', function(source)
+    -- Admin access is not yet implemented; deny all by default
+    return nil
+end)
+
+-- ============================================================
+-- LOAN SYSTEM
+-- ============================================================
+
+lib.callback.register('swisser_bank:getLoanData', function(source)
+    if not Config.LoanEnabled then return nil end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return nil end
+    local loan = exports.oxmysql:single_async('SELECT * FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    if loan then
+        return {
+            active = true,
+            amount = loan.amount,
+            originalAmount = loan.original_amount,
+            interestRate = loan.interest_rate,
+            dueDate = tostring(loan.due_date),
+            createdAt = tostring(loan.created_at)
+        }
+    end
+    return {
+        active = false,
+        interestRate = Config.LoanInterestRate,
+        maxAmount = Config.MaxLoanAmount,
+        minAmount = Config.MinLoanAmount
+    }
+end)
+
+lib.callback.register('swisser_bank:takeLoan', function(source, amount)
+    if not Config.LoanEnabled then return { success = false, reason = 'loan_disabled' } end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return { success = false } end
+
+    amount = math.floor(tonumber(amount) or 0)
+    if amount < Config.MinLoanAmount then return { success = false, reason = 'min' } end
+    if amount > Config.MaxLoanAmount then return { success = false, reason = 'max' } end
+
+    -- Check for existing active loan
+    local existing = exports.oxmysql:scalar_async('SELECT citizenid FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    if existing then return { success = false, reason = 'already_active' } end
+
+    local totalOwed = math.floor(amount * (1 + Config.LoanInterestRate))
+    local dueDate = os.date('%Y-%m-%d %H:%M:%S', os.time() + (Config.LoanDurationDays * 86400))
+
+    Bridge.AdjustMoney(source, 'bank', amount, 'add', 'Bank Loan')
+    exports.oxmysql:insert('INSERT INTO swisser_bank_loans (citizenid, amount, original_amount, interest_rate, due_date) VALUES (?, ?, ?, ?, ?)', {
+        citizenid, totalOwed, amount, Config.LoanInterestRate, dueDate
+    })
+    CreateLog(citizenid, amount, 'income', 'Bank Loan', 'personal')
+    SendBankMail(citizenid, "Loan Approved", "Your loan of " .. amount .. " " .. Config.Currency .. " has been deposited. Total to repay: " .. totalOwed .. " " .. Config.Currency .. ". Due: " .. dueDate, "Loan Department")
+
+    return { success = true, amount = amount, totalOwed = totalOwed }
+end)
+
+lib.callback.register('swisser_bank:repayLoan', function(source)
+    if not Config.LoanEnabled then return { success = false } end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return { success = false } end
+
+    local loan = exports.oxmysql:single_async('SELECT * FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    if not loan then return { success = false, reason = 'no_loan' } end
+
+    if Bridge.GetBankBalance(source) < loan.amount then
+        return { success = false, reason = 'insufficient' }
+    end
+
+    Bridge.AdjustMoney(source, 'bank', loan.amount, 'remove', 'Loan Repayment')
+    exports.oxmysql:execute('DELETE FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    CreateLog(citizenid, loan.amount, 'outcome', 'Loan Repayment', 'personal')
+    SendBankMail(citizenid, "Loan Repaid", "Your loan of " .. loan.amount .. " " .. Config.Currency .. " has been fully repaid. Your account is now clear.", "Loan Department")
+
+    return { success = true, amount = loan.amount }
 end)

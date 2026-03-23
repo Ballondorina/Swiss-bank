@@ -1,28 +1,15 @@
-local QBCore = exports['qb-core']:GetCoreObject()
 local PlayerData = {}
 local isUIOpen = false
-local lastGoalStatus = false 
+local lastGoalStatus = false
 
 local function L(key)
     if not Locales or not Locales[Config.Language] then return key end
     return Locales[Config.Language][key] or key
 end
 
-RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
-    PlayerData = QBCore.Functions.GetPlayerData()
-end)
-
-RegisterNetEvent('QBCore:Client:OnJobUpdate', function(JobInfo)
-    PlayerData.job = JobInfo
-end)
-
-RegisterNetEvent('QBCore:Player:SetPlayerData', function(val)
-    PlayerData = val
-end)
-
 local function OpenBankUI(isATM, isAdminDashboard)
     if isUIOpen then return end
-    
+
     local data = nil
     local adminData = nil
     local lang = Config.Language or 'en'
@@ -30,15 +17,15 @@ local function OpenBankUI(isATM, isAdminDashboard)
 
     if isAdminDashboard then
         adminData = lib.callback.await('swisser_bank:getAdminData', false)
-        if not adminData then 
+        if not adminData then
             if SendNotification then SendNotification("Access Denied", "error") end
-            return 
+            return
         end
     else
         data = lib.callback.await('swisser_bank:getData', false, 'personal')
-        if not data then 
+        if not data then
             if SendNotification then SendNotification("Error loading banking data", "error") end
-            return 
+            return
         end
     end
 
@@ -61,6 +48,14 @@ end
 
 RegisterNetEvent('swisser_bank:client:openAdmin', function()
     OpenBankUI(false, true)
+end)
+
+-- Forward server notifications to the NUI as toast messages
+RegisterNetEvent('swisser_bank:client:notify', function(notifType, message)
+    if SendNotification then SendNotification(message, notifType) end
+    if isUIOpen then
+        SendNUIMessage({ action = 'NOTIFY', type = notifType, message = message })
+    end
 end)
 
 CreateThread(function()
@@ -94,7 +89,7 @@ CreateThread(function()
                 radius = Config.BankInteractionRadius or 0.9,
                 options = {
                     {
-                        name = 'open_bank_'..i,
+                        name = 'open_bank_' .. i,
                         icon = 'fa-solid fa-building-columns',
                         label = L('open_bank'),
                         distance = Config.BankInteractionDistance or 1.5,
@@ -148,7 +143,6 @@ RegisterNUICallback('transfer', function(data, cb)
     cb('ok')
 end)
 
--- Added for Transfer Validation Feedback
 RegisterNUICallback('validateIBAN', function(data, cb)
     local result = lib.callback.await('swisser_bank:validateIBAN', false, data.iban)
     cb(result)
@@ -156,7 +150,7 @@ end)
 
 RegisterNUICallback('updateGoal', function(data, cb)
     local success = lib.callback.await('swisser_bank:updateGoal', false, data)
-    lastGoalStatus = false 
+    lastGoalStatus = false
     cb(success)
 end)
 
@@ -180,9 +174,23 @@ RegisterNUICallback('loadBankData', function(_, cb)
     cb(data)
 end)
 
-RegisterNetEvent('swisser_bank:markMailsRead', function()
-    local src = source
-    local Player = QBCore.Functions.GetPlayer(src)
-    if not Player then return end
-    exports.oxmysql:execute('UPDATE swisser_bank_mails SET is_read = 1 WHERE citizenid = ?', { Player.PlayerData.citizenid })
+RegisterNUICallback('markMailsRead', function(_, cb)
+    TriggerServerEvent('swisser_bank:markMailsRead')
+    cb('ok')
+end)
+
+-- Loan NUI callbacks
+RegisterNUICallback('getLoanData', function(_, cb)
+    local result = lib.callback.await('swisser_bank:getLoanData', false)
+    cb(result)
+end)
+
+RegisterNUICallback('takeLoan', function(data, cb)
+    local result = lib.callback.await('swisser_bank:takeLoan', false, data.amount)
+    cb(result)
+end)
+
+RegisterNUICallback('repayLoan', function(_, cb)
+    local result = lib.callback.await('swisser_bank:repayLoan', false)
+    cb(result)
 end)

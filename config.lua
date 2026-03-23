@@ -55,6 +55,13 @@ Config.PINChangeCost = 1000       -- Cost to change PIN
 Config.CustomCardCost = 5000      -- Cost for custom card design
 Config.AvatarChangeCost = 2500    -- Cost to change profile avatar
 
+-- [LOAN SETTINGS] ----------------------------------------------------------------------
+Config.LoanEnabled = true
+Config.LoanInterestRate = 0.10    -- 10% interest added on top of principal
+Config.MaxLoanAmount = 500000     -- Maximum loan amount players can request
+Config.MinLoanAmount = 5000       -- Minimum loan amount
+Config.LoanDurationDays = 7       -- Repayment window in real-life days
+
 -- [INTERACTION SETTINGS] --------------------------------------------------------------
 Config.UseOxTarget = true  -- Use ox_target for interactions (requires ox_target resource)
 
