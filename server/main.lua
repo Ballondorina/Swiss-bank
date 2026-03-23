@@ -41,6 +41,21 @@ local function VerifyBankAccess(source)
     return false
 end
 
+local function VerifyLaundryAccess(source)
+    if not Config.LaundryEnabled then return false end
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false end
+    local pCoords = GetEntityCoords(ped)
+    local npc = Config.LaundryNPC.coords
+    return #(pCoords - vector3(npc.x, npc.y, npc.z)) < 8.0
+end
+
+-- Log suspicious access attempts for server admins to review
+local function WarnCheat(source, eventName)
+    local name = GetPlayerName(source) or 'unknown'
+    print(string.format('[SwisserBank] ⚠️  BLOCKED: player %s (id:%d) tried "%s" without proper access.', name, source, eventName))
+end
+
 local function CheckCooldown(source)
     local now = GetGameTimer()
     if Cooldowns[source] and (now - Cooldowns[source]) < Config.EventCooldown then
@@ -236,6 +251,7 @@ lib.callback.register('swisser_bank:updateGoal', function(source, data)
 end)
 
 lib.callback.register('swisser_bank:changePIN', function(source, data)
+    if not VerifyBankAccess(source) then WarnCheat(source, 'changePIN'); return false end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return false end
 
@@ -258,6 +274,7 @@ lib.callback.register('swisser_bank:changePIN', function(source, data)
 end)
 
 lib.callback.register('swisser_bank:updateCard', function(source, url)
+    if not VerifyBankAccess(source) then WarnCheat(source, 'updateCard'); return false end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return false end
     if url == "REMOVE" then
@@ -274,6 +291,7 @@ lib.callback.register('swisser_bank:updateCard', function(source, url)
 end)
 
 lib.callback.register('swisser_bank:updateAvatar', function(source, url)
+    if not VerifyBankAccess(source) then WarnCheat(source, 'updateAvatar'); return false end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return false end
     if url == "REMOVE" then
@@ -338,6 +356,7 @@ end)
 
 lib.callback.register('swisser_bank:takeLoan', function(source, amount)
     if not Config.LoanEnabled then return { success = false, reason = 'loan_disabled' } end
+    if not VerifyBankAccess(source) then WarnCheat(source, 'takeLoan'); return { success = false } end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return { success = false } end
 
@@ -364,6 +383,7 @@ end)
 
 lib.callback.register('swisser_bank:repayLoan', function(source)
     if not Config.LoanEnabled then return { success = false } end
+    if not VerifyBankAccess(source) then WarnCheat(source, 'repayLoan'); return { success = false } end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return { success = false } end
 
@@ -601,6 +621,7 @@ end)
 -- Deposit cash → org account (all roles)
 lib.callback.register('swisser_bank:orgDeposit', function(source, amount)
     if not Config.GangAccountEnabled then return false end
+    if not VerifyBankAccess(source) then WarnCheat(source, 'orgDeposit'); return false end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return false end
     local gangName = Bridge.GetGang(source)
@@ -622,6 +643,7 @@ end)
 -- Withdraw from org account (admin/owner only)
 lib.callback.register('swisser_bank:orgWithdraw', function(source, amount)
     if not Config.GangAccountEnabled then return false end
+    if not VerifyBankAccess(source) then WarnCheat(source, 'orgWithdraw'); return false end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return false end
     local gangName = Bridge.GetGang(source)
@@ -648,6 +670,7 @@ end)
 -- Transfer from org account to a player (admin/owner only)
 lib.callback.register('swisser_bank:orgTransfer', function(source, targetAccNo, amount)
     if not Config.GangAccountEnabled then return false end
+    if not VerifyBankAccess(source) then WarnCheat(source, 'orgTransfer'); return false end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return false end
     local gangName = Bridge.GetGang(source)
@@ -694,6 +717,7 @@ end)
 -- Add a member by account number (owner only)
 lib.callback.register('swisser_bank:orgAddMember', function(source, targetAccNo)
     if not Config.GangAccountEnabled then return { ok = false } end
+    if not VerifyBankAccess(source) then WarnCheat(source, 'orgAddMember'); return { ok = false } end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid then return { ok = false } end
     local gangName = Bridge.GetGang(source)
@@ -721,6 +745,7 @@ end)
 -- Remove a member (owner only)
 lib.callback.register('swisser_bank:orgRemoveMember', function(source, targetCid)
     if not Config.GangAccountEnabled then return false end
+    if not VerifyBankAccess(source) then WarnCheat(source, 'orgRemoveMember'); return false end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid then return false end
     local gangName = Bridge.GetGang(source)
@@ -733,6 +758,7 @@ end)
 -- Set member role (owner only)
 lib.callback.register('swisser_bank:orgSetRole', function(source, targetCid, newRole)
     if not Config.GangAccountEnabled then return false end
+    if not VerifyBankAccess(source) then WarnCheat(source, 'orgSetRole'); return false end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid then return false end
     local gangName = Bridge.GetGang(source)
@@ -750,6 +776,7 @@ end)
 
 lib.callback.register('swisser_bank:submitLaundry', function(source, amount)
     if not Config.LaundryEnabled then return { ok = false, msg = 'Service unavailable.' } end
+    if not VerifyLaundryAccess(source) then WarnCheat(source, 'submitLaundry'); return { ok = false, msg = 'You are not near the NPC.' } end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid or not CheckCooldown(source) then return { ok = false, msg = 'Too fast.' } end
     amount = math.floor(tonumber(amount) or 0)
@@ -797,6 +824,7 @@ end)
 
 lib.callback.register('swisser_bank:collectLaundry', function(source)
     if not Config.LaundryEnabled then return { ok = false, msg = 'Service unavailable.' } end
+    if not VerifyLaundryAccess(source) then WarnCheat(source, 'collectLaundry'); return { ok = false, msg = 'You are not near the NPC.' } end
     local citizenid = Bridge.GetIdentifier(source)
     if not citizenid then return { ok = false } end
 
