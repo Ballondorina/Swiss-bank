@@ -446,6 +446,19 @@ lib.callback.register('swisser_bank:adminResetPIN', function(source, targetCid)
     return true
 end)
 
+-- Admin: broadcast a message to all online players
+lib.callback.register('swisser_bank:adminBroadcast', function(source, message)
+    if not IsAdminSource(source) then return false end
+    if type(message) ~= 'string' or #message == 0 or #message > 200 then return false end
+    local adminName = Bridge.GetName(source)
+    local fullMsg   = '📢 [Bank] ' .. message
+    for _, pid in ipairs(GetPlayers()) do
+        TriggerClientEvent('swisser_bank:client:notify', tonumber(pid), 'info', fullMsg)
+    end
+    print(string.format('[SwisserBank] Admin broadcast by %s: %s', adminName, message))
+    return true
+end)
+
 -- Admin: force-clear an active loan
 lib.callback.register('swisser_bank:adminClearLoan', function(source, targetCid)
     if not IsAdminSource(source) then return false end

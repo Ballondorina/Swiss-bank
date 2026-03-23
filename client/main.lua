@@ -373,3 +373,8 @@ RegisterNUICallback('adminClearLoan', function(data, cb)
     local result = lib.callback.await('swisser_bank:adminClearLoan', false, data.citizenid)
     cb(result)
 end)
+
+RegisterNUICallback('adminBroadcast', function(data, cb)
+    local result = lib.callback.await('swisser_bank:adminBroadcast', false, data.message)
+    cb(result)
+end)

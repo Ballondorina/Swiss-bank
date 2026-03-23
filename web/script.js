@@ -1494,7 +1494,9 @@ function closeAdminUI() {
 
 function renderAdminPlayers() {
     const list = document.getElementById('admin-player-list');
+    const countEl = document.getElementById('admin-player-count');
     if (!list) return;
+    if (countEl) countEl.innerText = adminPlayerList.length;
     list.innerHTML = '';
     if (!adminPlayerList.length) {
         list.innerHTML = '<div class="admin-no-players"><i class="fa-solid fa-users-slash"></i><br>No players online</div>';
@@ -1603,6 +1605,31 @@ async function openAdminInspect(citizenid) {
         }
     });
 }
+
+// Broadcast
+document.getElementById('admin-broadcast-send')?.addEventListener('click', async () => {
+    const input = document.getElementById('admin-broadcast-input');
+    const message = input?.value.trim();
+    if (!message) return;
+    const btn = document.getElementById('admin-broadcast-send');
+    btn.disabled = true;
+    const ok = await fetch(`https://${GetParentResourceName()}/adminBroadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+    }).then(r => r.json());
+    btn.disabled = false;
+    if (ok) {
+        showToast(`Broadcast sent to ${adminPlayerList.length} player(s)`, 'success');
+        input.value = '';
+    } else {
+        showToast('Failed to send broadcast', 'error');
+    }
+});
+
+document.getElementById('admin-broadcast-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('admin-broadcast-send')?.click();
+});
 
 document.getElementById('admin-close-btn')?.addEventListener('click', closeAdminUI);
 document.getElementById('admin-modal-close')?.addEventListener('click', () => {

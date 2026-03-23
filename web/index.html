@@ -546,6 +546,22 @@
                     </button>
                 </div>
 
+                <!-- Broadcast section -->
+                <div class="admin-broadcast-card">
+                    <div class="admin-broadcast-label">
+                        <i class="fa-solid fa-bullhorn"></i> Bank-wide Announcement
+                    </div>
+                    <div class="admin-broadcast-row">
+                        <input type="text" id="admin-broadcast-input" class="form-control"
+                            placeholder="e.g. Bank transfers will be disabled while we fix our servers!"
+                            maxlength="200">
+                        <button class="admin-broadcast-btn" id="admin-broadcast-send">
+                            <i class="fa-solid fa-paper-plane"></i> Send to All
+                        </button>
+                    </div>
+                </div>
+
+                <div class="admin-section-label">Online Players (<span id="admin-player-count">0</span>)</div>
                 <div class="admin-player-grid" id="admin-player-list">
                     <!-- populated by JS -->
                 </div>

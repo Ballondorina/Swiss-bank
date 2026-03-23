@@ -782,6 +782,60 @@ transform: translateY(-6px);
 .admin-action-btn--loan   { background: rgba(139,92,246,0.15);  color: #8b5cf6;  border: 1px solid rgba(139,92,246,0.3); }
 .admin-no-players { text-align: center; opacity: 0.4; padding: 40px; font-size: 15px; }
 
+.admin-broadcast-card {
+    background: rgba(31,94,255,0.08);
+    border: 1px solid rgba(31,94,255,0.25);
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin-bottom: 22px;
+}
+.admin-broadcast-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--primary);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.admin-broadcast-row {
+    display: flex;
+    gap: 10px;
+}
+.admin-broadcast-row .form-control {
+    flex: 1;
+}
+.admin-broadcast-btn {
+    padding: 10px 20px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.admin-broadcast-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+.admin-broadcast-btn:active { transform: translateY(0); }
+.admin-broadcast-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.admin-section-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    opacity: 0.4;
+    margin-bottom: 12px;
+}
+
 /* ATM UI */
 #atm-container { 
     position: fixed; 
