@@ -303,6 +303,24 @@
                     <div id="page-loans" class="page-content hidden">
                         <div class="loans-layout">
 
+                            <!-- Account frozen banner -->
+                            <div id="loan-frozen-banner" class="loan-frozen-banner hidden">
+                                <i class="fa-solid fa-lock loan-frozen-banner__icon"></i>
+                                <div>
+                                    <div class="loan-frozen-banner__title">🔒 Account Frozen</div>
+                                    <div class="loan-frozen-banner__sub">Withdrawals and transfers are blocked. Repay your loan to unlock.</div>
+                                </div>
+                            </div>
+
+                            <!-- Warning banner (always visible) -->
+                            <div class="loan-warning-banner">
+                                <span class="loan-warning-banner__emoji">⚠️</span>
+                                <div class="loan-warning-banner__text">
+                                    <strong>Att Låna pengar är inte gratis!</strong>
+                                    <span>Late payments result in daily warnings, a 15% penalty on day 4, and full account freeze on day 7.</span>
+                                </div>
+                            </div>
+
                             <!-- Active loan card (shown when loan exists) -->
                             <div id="active-loan-card" class="loan-status-card hidden">
                                 <div class="loan-status-card__header">

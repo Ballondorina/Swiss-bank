@@ -144,12 +144,23 @@ RegisterNetEvent('swisser_bank:deposit', function(amount, accountType)
     end
 end)
 
+local function IsAccountLocked(citizenid)
+    if not Config.LoanEnabled then return false end
+    local locked = exports.oxmysql:scalar_async('SELECT account_locked FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
+    return locked == 1
+end
+
 RegisterNetEvent('swisser_bank:withdraw', function(amount, accountType)
     local src = source
     if not CheckCooldown(src) or not VerifyBankAccess(src) then return end
     local citizenid = Bridge.GetIdentifier(src)
     amount = math.floor(tonumber(amount) or 0)
     if not citizenid or amount <= 0 or amount > 10000000 then return end
+
+    if IsAccountLocked(citizenid) then
+        TriggerClientEvent('swisser_bank:client:notify', src, 'error', '🔒 Account frozen due to overdue loan. Repay your loan to unlock.')
+        return
+    end
 
     if Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Bank Withdraw') then
         Bridge.AdjustMoney(src, 'cash', amount, 'add', 'Bank Withdraw')
@@ -167,6 +178,11 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
     amount = math.floor(tonumber(amount) or 0)
     if not citizenid or amount <= 0 or amount > 10000000 then return end
     if Bridge.GetBankBalance(src) < amount then return end
+
+    if IsAccountLocked(citizenid) then
+        TriggerClientEvent('swisser_bank:client:notify', src, 'error', '🔒 Account frozen due to overdue loan. Repay your loan to unlock.')
+        return
+    end
 
     local targetData = exports.oxmysql:single_async('SELECT citizenid FROM swisser_bank_pins WHERE account_no = ?', { accountNo })
     if not targetData then return end
@@ -293,20 +309,28 @@ lib.callback.register('swisser_bank:getLoanData', function(source)
     if not citizenid then return nil end
     local loan = exports.oxmysql:single_async('SELECT * FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
     if loan then
+        local daysOverdue = 0
+        if os.time() > loan.due_date then
+            daysOverdue = math.floor((os.time() - loan.due_date) / 86400)
+        end
         return {
-            active = true,
-            amount = loan.amount,
-            originalAmount = loan.original_amount,
-            interestRate = loan.interest_rate,
-            dueDate = tostring(loan.due_date),
-            createdAt = tostring(loan.created_at)
+            hasLoan = true,
+            loan = {
+                amount    = loan.amount,
+                remaining = loan.amount,
+                due_date  = tostring(loan.due_date),
+            },
+            interestRate  = loan.interest_rate * 100,
+            accountLocked = loan.account_locked == 1,
+            daysOverdue   = daysOverdue,
+            penaltyApplied = loan.penalty_applied == 1,
         }
     end
     return {
-        active = false,
-        interestRate = Config.LoanInterestRate,
-        maxAmount = Config.MaxLoanAmount,
-        minAmount = Config.MinLoanAmount
+        hasLoan       = false,
+        interestRate  = Config.LoanInterestRate * 100,
+        maxLoanAmount = Config.MaxLoanAmount,
+        minLoanAmount = Config.MinLoanAmount,
     }
 end)
 
@@ -354,4 +378,110 @@ lib.callback.register('swisser_bank:repayLoan', function(source)
     SendBankMail(citizenid, "Loan Repaid", "Your loan of " .. loan.amount .. " " .. Config.Currency .. " has been fully repaid. Your account is now clear.", "Loan Department")
 
     return { success = true, amount = loan.amount }
+end)
+
+-- ============================================================
+-- LOAN ENFORCEMENT THREAD
+-- Runs every hour. Checks all overdue loans and applies:
+--   Day 1-3 overdue  → daily warning mail
+--   Day 4  overdue   → 15% penalty added once to amount
+--   Day 7+ overdue   → account frozen (no withdraw/transfer)
+-- ============================================================
+CreateThread(function()
+    while true do
+        Wait(3600 * 1000) -- check every hour
+
+        if not dbReady or not Config.LoanEnabled then goto continue end
+
+        local now = os.time()
+        local overdueLoans = exports.oxmysql:query_async([[
+            SELECT citizenid, amount, original_amount, interest_rate,
+                   UNIX_TIMESTAMP(due_date) AS due_ts,
+                   overdue_notified, penalty_applied, account_locked
+            FROM swisser_bank_loans
+            WHERE due_date < NOW()
+        ]])
+
+        if not overdueLoans then goto continue end
+
+        for _, loan in ipairs(overdueLoans) do
+            local cid        = loan.citizenid
+            local daysLate   = math.floor((now - loan.due_ts) / 86400)
+            local notified   = loan.overdue_notified or 0
+            local penaltyDone = loan.penalty_applied == 1
+            local locked     = loan.account_locked == 1
+
+            -- Days 1-3: send one warning mail per day (only new days)
+            if daysLate >= 1 and daysLate <= 3 and daysLate > notified then
+                local daysLeft = math.max(0, 7 - daysLate)
+                SendBankMail(
+                    cid,
+                    "⚠️ Loan Overdue — Day " .. daysLate,
+                    "⚠️ Att Låna pengar är inte gratis!\n\n" ..
+                    "Your loan repayment was due " .. daysLate .. " day(s) ago.\n" ..
+                    "Outstanding balance: " .. loan.amount .. " " .. Config.Currency .. "\n\n" ..
+                    "You have approximately " .. daysLeft .. " day(s) before your account is FROZEN.\n" ..
+                    "Repay immediately to avoid penalties and account restrictions.",
+                    "⚠️ Debt Collection"
+                )
+                exports.oxmysql:execute('UPDATE swisser_bank_loans SET overdue_notified = ? WHERE citizenid = ?', { daysLate, cid })
+
+                -- Notify if player is online
+                local src = Bridge.GetPlayerByCID(cid)
+                if src then
+                    TriggerClientEvent('swisser_bank:client:notify', src, 'error',
+                        '⚠️ Att Låna pengar är inte gratis! Loan overdue by ' .. daysLate .. ' day(s). Repay NOW to avoid penalties!')
+                end
+            end
+
+            -- Day 4: apply 15% penalty once
+            if daysLate >= 4 and not penaltyDone then
+                local penalty = math.floor(loan.amount * 0.15)
+                local newAmount = loan.amount + penalty
+                exports.oxmysql:execute([[
+                    UPDATE swisser_bank_loans
+                    SET amount = ?, penalty_applied = 1
+                    WHERE citizenid = ?
+                ]], { newAmount, cid })
+                SendBankMail(
+                    cid,
+                    "💸 15% Late Penalty Applied",
+                    "⚠️ Att Låna pengar är inte gratis!\n\n" ..
+                    "Your loan is 4+ days overdue. A 15% late penalty has been added.\n" ..
+                    "Previous balance: " .. loan.amount .. " " .. Config.Currency .. "\n" ..
+                    "Penalty added:   +" .. penalty .. " " .. Config.Currency .. "\n" ..
+                    "New total owed:  " .. newAmount .. " " .. Config.Currency .. "\n\n" ..
+                    "Repay now — your account will be FROZEN in 3 days if unpaid.",
+                    "💸 Penalty Department"
+                )
+                local src = Bridge.GetPlayerByCID(cid)
+                if src then
+                    TriggerClientEvent('swisser_bank:client:notify', src, 'error',
+                        '💸 15% late penalty added! New debt: ' .. newAmount .. ' ' .. Config.Currency)
+                end
+            end
+
+            -- Day 7+: freeze account
+            if daysLate >= 7 and not locked then
+                exports.oxmysql:execute('UPDATE swisser_bank_loans SET account_locked = 1 WHERE citizenid = ?', { cid })
+                SendBankMail(
+                    cid,
+                    "🔒 Account Frozen — Overdue Loan",
+                    "⚠️ Att Låna pengar är inte gratis!\n\n" ..
+                    "Your account has been FROZEN due to an unpaid loan that is 7+ days overdue.\n\n" ..
+                    "🔒 All withdrawals and transfers are BLOCKED.\n" ..
+                    "Outstanding balance: " .. loan.amount .. " " .. Config.Currency .. "\n\n" ..
+                    "Visit the bank and repay your loan in full to unfreeze your account.",
+                    "🔒 Account Security"
+                )
+                local src = Bridge.GetPlayerByCID(cid)
+                if src then
+                    TriggerClientEvent('swisser_bank:client:notify', src, 'error',
+                        '🔒 Your account has been FROZEN. Repay your overdue loan immediately!')
+                end
+            end
+        end
+
+        ::continue::
+    end
 end)

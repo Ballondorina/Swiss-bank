@@ -1106,19 +1106,32 @@ function renderLoanUI(data) {
     const noLoanCard = document.getElementById('no-loan-card');
     const loanFormCard = document.getElementById('loan-form-card');
     const loanBadge = document.getElementById('loan-badge');
+    const frozenBanner = document.getElementById('loan-frozen-banner');
 
     document.getElementById('loan-summary-rate').innerText = currentLoanRate;
 
+    // Frozen banner
+    if (frozenBanner) {
+        if (data.accountLocked) frozenBanner.classList.remove('hidden');
+        else frozenBanner.classList.add('hidden');
+    }
+
     if (data.hasLoan && data.loan) {
         const loan = data.loan;
-        const totalRepay = loan.amount + Math.round(loan.amount * (currentLoanRate / 100));
-        const repaid = totalRepay - loan.remaining;
-        const pct = Math.min(Math.max((repaid / totalRepay) * 100, 0), 100);
+        const pct = 0; // server tracks full remaining; no partial yet
 
         document.getElementById('loan-amount-display').innerText = `${(loan.remaining || loan.amount).toLocaleString()} ${currencySymbol}`;
         document.getElementById('loan-due-display').innerText = loan.due_date ? new Date(loan.due_date).toLocaleDateString() : '—';
-        document.getElementById('loan-rate-text').innerText = `${currentLoanRate}% interest`;
-        document.getElementById('loan-progress-bar').style.width = `${100 - pct}%`;
+        document.getElementById('loan-rate-text').innerText = `${currentLoanRate}% interest${data.penaltyApplied ? ' +15% penalty' : ''}`;
+        document.getElementById('loan-progress-bar').style.width = `100%`;
+
+        // Red bar when overdue
+        const bar = document.getElementById('loan-progress-bar');
+        if (data.daysOverdue > 0) {
+            bar.style.background = 'linear-gradient(90deg, #ef4444, #f59e0b)';
+        } else {
+            bar.style.background = '';
+        }
 
         activeLoanCard.classList.remove('hidden');
         noLoanCard.classList.add('hidden');

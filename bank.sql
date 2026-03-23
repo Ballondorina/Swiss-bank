@@ -66,5 +66,13 @@ CREATE TABLE IF NOT EXISTS `swisser_bank_loans` (
   `interest_rate` float NOT NULL DEFAULT 0.10,
   `due_date` datetime NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `overdue_notified` int(11) NOT NULL DEFAULT 0,   -- highest warning day already sent (1-3)
+  `penalty_applied` tinyint(1) NOT NULL DEFAULT 0, -- 1 = 15% penalty already added on day 4
+  `account_locked` tinyint(1) NOT NULL DEFAULT 0,  -- 1 = withdrawals/transfers blocked
   PRIMARY KEY (`citizenid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Migration: add new columns if upgrading from an older version
+ALTER TABLE `swisser_bank_loans` ADD COLUMN IF NOT EXISTS `overdue_notified` int(11) NOT NULL DEFAULT 0;
+ALTER TABLE `swisser_bank_loans` ADD COLUMN IF NOT EXISTS `penalty_applied` tinyint(1) NOT NULL DEFAULT 0;
+ALTER TABLE `swisser_bank_loans` ADD COLUMN IF NOT EXISTS `account_locked` tinyint(1) NOT NULL DEFAULT 0;
