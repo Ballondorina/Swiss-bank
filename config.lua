@@ -136,6 +136,46 @@ Config.LaundryDialogue = {
     collected   = "Nothing here for you right now.",
 }
 
+-- ============================================================
+-- INTEGRATIONS
+-- ============================================================
+
+-- [NOTIFICATION SYSTEM] -------------------------------------------------------
+-- Options: 'qb' | 'esx' | 'ox' | 'qs' | 'jg' | 'okok' | 'mythic' | 'pnotify' | 'brutal' | 'ps'
+-- Config.NotifySystem is already defined above — change it there.
+
+-- [DISCORD WEBHOOK LOGGING] ---------------------------------------------------
+Config.DiscordEnabled   = false       -- set true to enable Discord logs
+Config.DiscordWebhook   = ''          -- paste your webhook URL here
+Config.DiscordBotName   = 'Swiss Bank'
+Config.DiscordAvatar    = ''          -- optional bot avatar image URL
+Config.DiscordMinAmount = 0           -- only log transactions at or above this amount (0 = all)
+-- Which events to log (set false to silence specific ones)
+Config.DiscordLogs = {
+    deposit   = true,   -- player deposited cash
+    withdraw  = true,   -- player withdrew cash
+    transfer  = true,   -- player sent a transfer
+    loan      = true,   -- loan taken or repaid
+    laundry   = true,   -- laundry completed
+    admin     = true,   -- admin actions (freeze, broadcast, clear loan…)
+    suspicious = true,  -- blocked exploit attempts (WarnCheat)
+}
+
+-- [LB-PHONE PUSH NOTIFICATIONS] -----------------------------------------------
+Config.LBPhoneEnabled = false   -- push bank alerts to lb-phone (requires lb-phone resource)
+-- Which events send a phone notification
+Config.LBPhoneEvents = {
+    transfer_received = true,   -- you received a transfer
+    loan_overdue      = true,   -- overdue loan warning
+    account_frozen    = true,   -- account frozen notification
+}
+
+-- [OX_INVENTORY CASH] ---------------------------------------------------------
+Config.UseOxInventory = false   -- use ox_inventory item for cash instead of framework money
+Config.CashItem       = 'money' -- inventory item name for cash
+
+-- ============================================================
+
 Config.BankLocations = {
     { coords = vector3(149.95, -1040.83, 29.37), label = "Bank" },
     { coords = vector3(-1212.98, -330.84, 37.78), label = "Bank" },

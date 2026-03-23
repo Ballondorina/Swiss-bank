@@ -49,19 +49,36 @@ function Bridge.GetBankBalance(source)
     end
 end
 
-function Bridge.AdjustMoney(source, account, amount, type, reason)
+function Bridge.AdjustMoney(source, account, amount, adjType, reason)
+    -- ox_inventory cash: use inventory item instead of framework money account
+    if Config.UseOxInventory and account == 'cash' then
+        if GetResourceState('ox_inventory') ~= 'started' then return false end
+        local item = Config.CashItem or 'money'
+        if adjType == 'add' then
+            exports.ox_inventory:AddItem(source, item, amount)
+            return true
+        else
+            local count = exports.ox_inventory:GetItemCount(source, item)
+            if count >= amount then
+                exports.ox_inventory:RemoveItem(source, item, amount)
+                return true
+            end
+            return false
+        end
+    end
+
     local Player = Bridge.GetPlayer(source)
     if not Player then return false end
-    
+
     if CurrentFramework == 'qb' then
-        if type == 'add' then
+        if adjType == 'add' then
             return Player.Functions.AddMoney(account, amount, reason)
         else
             return Player.Functions.RemoveMoney(account, amount, reason)
         end
     else
         local esxAccount = account == 'cash' and 'money' or 'bank'
-        if type == 'add' then
+        if adjType == 'add' then
             Player.addAccountMoney(esxAccount, amount)
             return true
         else

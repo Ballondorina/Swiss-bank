@@ -63,6 +63,7 @@ end
 local function WarnCheat(source, eventName)
     local name = GetPlayerName(source) or 'unknown'
     print(string.format('[SwisserBank] ⚠️  BLOCKED: player %s (id:%d) tried "%s" without proper access.', name, source, eventName))
+    Integrations.OnSuspicious(source, eventName)
 end
 
 local function CheckCooldown(source)
@@ -168,6 +169,7 @@ RegisterNetEvent('swisser_bank:deposit', function(amount, accountType)
         Bridge.AdjustMoney(src, 'bank', amount, 'add', 'Bank Deposit')
         CreateLog(citizenid, amount, 'income', 'Bank Deposit', 'personal')
         TriggerClientEvent('swisser_bank:client:notify', src, 'success', LS('notify_deposited', amount, Config.Currency))
+        Integrations.OnDeposit(src, citizenid, amount)
     else
         TriggerClientEvent('swisser_bank:client:notify', src, 'error', LS('notify_no_cash'))
     end
@@ -195,6 +197,7 @@ RegisterNetEvent('swisser_bank:withdraw', function(amount, accountType)
         Bridge.AdjustMoney(src, 'cash', amount, 'add', 'Bank Withdraw')
         CreateLog(citizenid, amount, 'outcome', 'Bank Withdraw', 'personal')
         TriggerClientEvent('swisser_bank:client:notify', src, 'success', LS('notify_withdrawn', amount, Config.Currency))
+        Integrations.OnWithdraw(src, citizenid, amount)
     else
         TriggerClientEvent('swisser_bank:client:notify', src, 'error', LS('notify_no_funds'))
     end
@@ -238,6 +241,7 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
             LS('notify_sent', amount, Config.Currency, targetName, accountNo))
         TriggerClientEvent('swisser_bank:client:notify', targetSrc, 'success',
             LS('notify_received', amount, Config.Currency, senderName, myShortAccount))
+        Integrations.OnTransfer(src, citizenid, targetSrc, targetData.citizenid, amount, senderName, targetName, myShortAccount, accountNo)
     else
         -- Offline player transfer — look up target name from DB
         local targetName = Bridge.GetNameByCID(targetData.citizenid)
@@ -272,6 +276,7 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
             )
             TriggerClientEvent('swisser_bank:client:notify', src, 'success',
                 LS('notify_sent', amount, Config.Currency, targetName, accountNo))
+            Integrations.OnTransfer(src, citizenid, nil, targetData.citizenid, amount, senderName, targetName, myShortAccount, accountNo)
         end
     end
 end)
@@ -420,6 +425,7 @@ lib.callback.register('swisser_bank:adminToggleFreeze', function(source, targetC
         ]], { targetCid })
         local tSrc = Bridge.GetPlayerByCID(targetCid)
         if tSrc then TriggerClientEvent('swisser_bank:client:notify', tSrc, 'error', '🔒 Your account has been frozen by an administrator.') end
+        Integrations.OnAdminAction(source, 'freeze', targetCid)
         return { frozen = true }
     end
 
@@ -433,6 +439,7 @@ lib.callback.register('swisser_bank:adminToggleFreeze', function(source, targetC
             TriggerClientEvent('swisser_bank:client:notify', tSrc, 'success', '✅ Your account has been unfrozen by an administrator.')
         end
     end
+    Integrations.OnAdminAction(source, newLocked == 1 and 'freeze' or 'unfreeze', targetCid)
     return { frozen = newLocked == 1 }
 end)
 
@@ -443,6 +450,7 @@ lib.callback.register('swisser_bank:adminResetPIN', function(source, targetCid)
     exports.oxmysql:execute('UPDATE swisser_bank_pins SET pin = ? WHERE citizenid = ?', { Config.DefaultPIN, targetCid })
     local tSrc = Bridge.GetPlayerByCID(targetCid)
     if tSrc then TriggerClientEvent('swisser_bank:client:notify', tSrc, 'inform', 'ℹ️ Your bank PIN has been reset by an administrator.') end
+    Integrations.OnAdminAction(source, 'resetPIN', targetCid)
     return true
 end)
 
@@ -456,6 +464,7 @@ lib.callback.register('swisser_bank:adminBroadcast', function(source, message)
         TriggerClientEvent('swisser_bank:client:notify', tonumber(pid), 'info', fullMsg)
     end
     print(string.format('[SwisserBank] Admin broadcast by %s: %s', adminName, message))
+    Integrations.OnAdminAction(source, 'broadcast: ' .. message, 'ALL')
     return true
 end)
 
@@ -466,6 +475,7 @@ lib.callback.register('swisser_bank:adminClearLoan', function(source, targetCid)
     exports.oxmysql:execute('DELETE FROM swisser_bank_loans WHERE citizenid = ?', { targetCid })
     local tSrc = Bridge.GetPlayerByCID(targetCid)
     if tSrc then TriggerClientEvent('swisser_bank:client:notify', tSrc, 'success', '✅ Your loan has been cleared by an administrator.') end
+    Integrations.OnAdminAction(source, 'clearLoan', targetCid)
     return true
 end)
 
@@ -542,6 +552,7 @@ lib.callback.register('swisser_bank:takeLoan', function(source, amount)
     })
     CreateLog(citizenid, amount, 'income', 'Bank Loan', 'personal')
     SendBankMail(citizenid, "Loan Approved", "Your loan of " .. amount .. " " .. Config.Currency .. " has been deposited. Total to repay: " .. totalOwed .. " " .. Config.Currency .. ". Due: " .. dueDate, "Loan Department")
+    Integrations.OnLoanTaken(source, citizenid, amount, totalOwed)
 
     return { success = true, amount = amount, totalOwed = totalOwed }
 end)
@@ -563,6 +574,7 @@ lib.callback.register('swisser_bank:repayLoan', function(source)
     exports.oxmysql:execute('DELETE FROM swisser_bank_loans WHERE citizenid = ?', { citizenid })
     CreateLog(citizenid, loan.amount, 'outcome', 'Loan Repayment', 'personal')
     SendBankMail(citizenid, "Loan Repaid", "Your loan of " .. loan.amount .. " " .. Config.Currency .. " has been fully repaid. Your account is now clear.", "Loan Department")
+    Integrations.OnLoanRepaid(source, citizenid, loan.amount)
 
     return { success = true, amount = loan.amount }
 end)
@@ -618,6 +630,7 @@ CreateThread(function()
                 if src then
                     TriggerClientEvent('swisser_bank:client:notify', src, 'error',
                         '⚠️ Att Låna pengar är inte gratis! Loan overdue by ' .. daysLate .. ' day(s). Repay NOW to avoid penalties!')
+                    Integrations.OnLoanOverdue(src, cid, daysLate, loan.amount)
                 end
             end
 
@@ -665,6 +678,7 @@ CreateThread(function()
                 if src then
                     TriggerClientEvent('swisser_bank:client:notify', src, 'error',
                         '🔒 Your account has been FROZEN. Repay your overdue loan immediately!')
+                    Integrations.OnAccountFrozen(src, cid)
                 end
             end
         end
@@ -1008,6 +1022,7 @@ lib.callback.register('swisser_bank:collectLaundry', function(source)
     Bridge.AdjustMoney(source, 'bank', job.amount_clean, 'add', 'Laundered Funds')
     exports.oxmysql:execute('UPDATE swisser_bank_laundry SET collected = 1 WHERE citizenid = ?', { citizenid })
     CreateLog(citizenid, job.amount_clean, 'income', 'Deposit', 'personal') -- generic label on purpose
+    Integrations.OnLaundry(source, citizenid, job.amount_dirty, job.amount_clean)
 
     return { ok = true, msg = Config.LaundryDialogue.ready, amount = job.amount_clean }
 end)

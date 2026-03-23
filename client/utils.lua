@@ -1,27 +1,38 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+local QBCore = nil
+if GetResourceState('qb-core') == 'started' then
+    QBCore = exports['qb-core']:GetCoreObject()
+end
 
 function SendNotification(text, type)
-    if Config.NotifySystem == 'qb' then
-        QBCore.Functions.Notify(text, type)
+    local t = type or 'info'
+    if Config.NotifySystem == 'qb' and QBCore then
+        QBCore.Functions.Notify(text, t)
+    elseif Config.NotifySystem == 'esx' then
+        -- ESX default notification
+        if GetResourceState('es_extended') == 'started' then
+            exports['es_extended']:ShowNotification(text)
+        end
     elseif Config.NotifySystem == 'ox' then
-        lib.notify({ title = 'Bank', description = text, type = type == 'primary' and 'info' or type })
+        lib.notify({ title = 'Bank', description = text, type = t == 'primary' and 'info' or t })
     elseif Config.NotifySystem == 'qs' then
-        exports['qs-notify']:Alert("Bank", text, 5000, type)
+        exports['qs-notify']:Alert("Bank", text, 5000, t)
     elseif Config.NotifySystem == 'jg' then
-        exports['jg-notify']:SendAlert("Bank", text, 5000, type)
+        exports['jg-notify']:SendAlert("Bank", text, 5000, t)
     elseif Config.NotifySystem == 'okok' then
-        -- Corrected Export Name
-        exports['okokNotify']:Alert("Bank", text, 5000, type)
+        exports['okokNotify']:Alert("Bank", text, 5000, t)
     elseif Config.NotifySystem == 'mythic' then
-        exports['mythic_notify']:DoHudText(type, text)
+        exports['mythic_notify']:DoHudText(t, text)
+    elseif Config.NotifySystem == 'pnotify' then
+        -- pNotify (standalone or QB-wrapped)
+        exports['pNotify']:SendNotification({ text = text, type = t, duration = 5000 })
     elseif Config.NotifySystem == 'brutal' then
-        local brutalType = type
-        if type == 'success' then brutalType = 'success' 
-        elseif type == 'error' then brutalType = 'error'
-        else brutalType = 'info' end
+        local brutalType = (t == 'success' or t == 'error') and t or 'info'
         exports['brutal_notifications']:Notification("BANK", text, 5000, brutalType)
+    elseif Config.NotifySystem == 'ps' then
+        -- ps-ui notify (Project Sloth)
+        exports['ps-ui']:Notify(text, t, 5000)
     else
-        print(string.format("[Bank Notification] %s: %s", type, text))
+        print(string.format("[Bank Notification] %s: %s", t, text))
     end
 end
 
