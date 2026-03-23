@@ -170,9 +170,18 @@ Config.LBPhoneEvents = {
     account_frozen    = true,   -- account frozen notification
 }
 
--- [OX_INVENTORY CASH] ---------------------------------------------------------
-Config.UseOxInventory = false   -- use ox_inventory item for cash instead of framework money
-Config.CashItem       = 'money' -- inventory item name for cash
+-- [INVENTORY CASH] ------------------------------------------------------------
+-- Which inventory resource handles cash (hand money) on your server.
+-- Options: 'ox' | 'qs' | 'ak47' | 'ps' | 'codem' | 'none'
+--   'none'  → cash is handled by your framework (QBCore / ESX) — default
+--   'ox'    → ox_inventory
+--   'qs'    → qs-inventory
+--   'ak47'  → ak47_inventory
+--   'ps'    → ps-inventory (Project Sloth)
+--   'codem' → codem-inventory
+-- To add a custom inventory, follow the instructions in bridge/server.lua.
+Config.InventorySystem = 'none'
+Config.CashItem        = 'money' -- item name used by your inventory for cash
 
 -- ============================================================
 
