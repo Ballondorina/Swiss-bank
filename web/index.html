@@ -71,7 +71,7 @@
                             <i class="fa-solid fa-paper-plane"></i><span id="lbl-transfer">Transfer</span>
                         </div>
                         <div class="sidebar-item" data-page="loans">
-                            <i class="fa-solid fa-hand-holding-dollar"></i><span id="lbl-loans">Loans</span>
+                            <i class="fa-solid fa-hand-holding-dollar"></i><span id="lbl-loans" data-loc="loans">Loans</span>
                             <span id="loan-badge" class="sidebar-badge loan-badge hidden">!</span>
                         </div>
                         <div class="sidebar-item hidden" id="sidebar-org" data-page="org">
@@ -311,8 +311,8 @@
                             <div id="loan-frozen-banner" class="loan-frozen-banner hidden">
                                 <i class="fa-solid fa-lock loan-frozen-banner__icon"></i>
                                 <div>
-                                    <div class="loan-frozen-banner__title">🔒 Account Frozen</div>
-                                    <div class="loan-frozen-banner__sub">Withdrawals and transfers are blocked. Repay your loan to unlock.</div>
+                                    <div class="loan-frozen-banner__title" id="loan-frozen-banner__title">🔒 Account Frozen</div>
+                                    <div class="loan-frozen-banner__sub" id="loan-frozen-banner__sub">Withdrawals and transfers are blocked. Repay your loan to unlock.</div>
                                 </div>
                             </div>
 
@@ -353,13 +353,13 @@
                             <!-- No active loan placeholder -->
                             <div id="no-loan-card" class="no-loan-card">
                                 <div class="no-loan-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div>
-                                <div class="no-loan-title">No Active Loan</div>
-                                <div class="no-loan-sub">Borrow money instantly and repay with interest.</div>
+                                <div class="no-loan-title" id="no-loan-title">No Active Loan</div>
+                                <div class="no-loan-sub" id="no-loan-sub">Borrow money instantly and repay with interest.</div>
                             </div>
 
                             <!-- Loan request form -->
                             <div class="loan-form-card" id="loan-form-card">
-                                <h4 class="loan-form-title" id="lbl-take-loan">Request a Loan</h4>
+                                <h4 class="loan-form-title" id="lbl-take-loan" data-loc="take_loan">Request a Loan</h4>
                                 <div class="loan-presets" id="loan-presets">
                                     <button class="loan-preset-btn" data-amount="10000">$10K</button>
                                     <button class="loan-preset-btn" data-amount="25000">$25K</button>
@@ -526,6 +526,44 @@
                 <div class="modal-actions">
                     <button class="btn btn-blue flex-1" id="btn-save-goal" onclick="saveGoal()">Save Goal</button>
                     <button class="btn btn-ghost" id="btn-cancel-goal" onclick="toggleGoalEdit()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== ADMIN DASHBOARD ===== -->
+        <div id="admin-ui" style="display:none;" class="admin-ui-container animate__animated">
+            <div class="admin-panel">
+                <div class="admin-header">
+                    <div class="admin-header-left">
+                        <i class="fa-solid fa-shield-halved admin-header-icon"></i>
+                        <div>
+                            <div class="admin-header-title">Admin Dashboard</div>
+                            <div class="admin-header-sub">Swiss Bank Staff Panel</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-ghost" id="admin-close-btn">
+                        <i class="fa-solid fa-power-off"></i> Close
+                    </button>
+                </div>
+
+                <div class="admin-player-grid" id="admin-player-list">
+                    <!-- populated by JS -->
+                </div>
+            </div>
+
+            <!-- Inspect modal -->
+            <div id="admin-inspect-modal" class="modal-overlay hidden">
+                <div class="modal-content animate__animated animate__zoomIn" style="max-width:440px;">
+                    <h3 class="modal-title"><i class="fa-solid fa-user-shield"></i> Player Details</h3>
+                    <div id="admin-inspect-body" class="admin-inspect-body">
+                        <!-- populated by JS -->
+                    </div>
+                    <div class="admin-inspect-actions" id="admin-inspect-actions">
+                        <!-- populated by JS -->
+                    </div>
+                    <div class="modal-actions" style="margin-top:16px;">
+                        <button class="btn btn-ghost" id="admin-modal-close">Close</button>
+                    </div>
                 </div>
             </div>
         </div>

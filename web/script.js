@@ -600,43 +600,69 @@ function openBankDashboard(data, locale) {
 function applyLocale(loc) {
     if (!loc) return;
     const mappings = {
-        'lbl-overview': loc.overview,
-        'lbl-transactions': loc.transactions,
-        'lbl-transfer': loc.transfer,
-        'lbl-mailbox': loc.mailbox || "Mailbox",
-        'lbl-settings': loc.settings,
-        'lbl-exit': loc.exit,
-        'lbl-balance': loc.balance,
-        'btn-deposit': loc.deposit,
-        'btn-withdraw': loc.withdraw,
-        'btn-transfer': loc.send,
-        'bank-title': loc.welcome_short || "Swisser Bank",
-        'btn-change-pin': loc.change_pin_btn || "Update Code",
-        'btn-order-card': loc.order_card || "Order Card",
-        'btn-remove-card': loc.reset_default || "Reset Default",
-        'lbl-analysis-title': loc.analysis_title,
+        // Sidebar nav
+        'lbl-overview':      loc.overview,
+        'lbl-transactions':  loc.transactions,
+        'lbl-transfer':      loc.transfer,
+        'lbl-loans':         loc.loans || "Loans",
+        'lbl-org':           loc.org || "Organization",
+        'lbl-mailbox':       loc.mailbox || "Mailbox",
+        'lbl-settings':      loc.settings,
+        'lbl-exit':          loc.exit,
+        // Overview
+        'lbl-balance':          loc.balance,
+        'lbl-analysis-title':   loc.analysis_title,
         'lbl-savings-goal-title': loc.savings_goal,
-        'btn-goal-settings': loc.goal_settings,
-        'lbl-card-number': loc.card_number_label,
-        'lbl-quick-transfer': loc.quick_transfer,
-        'lbl-transfer-iban': loc.transfer_iban_label,
-        'lbl-transfer-amount': loc.transfer_amount_label,
-        'lbl-security-title': loc.settings_title,
+        'btn-goal-settings':    loc.goal_settings,
+        'lbl-card-number':      loc.card_number_label,
+        // Deposit / withdraw buttons
+        'btn-deposit':   loc.deposit,
+        'btn-withdraw':  loc.withdraw,
+        // Transfer page
+        'lbl-quick-transfer':   loc.quick_transfer,
+        'lbl-transfer-iban':    loc.transfer_iban_label,
+        'lbl-transfer-amount':  loc.transfer_amount_label,
+        'btn-transfer':         loc.send,
+        // Loans page
+        'lbl-take-loan':            loc.take_loan || "Request a Loan",
+        'btn-repay-loan':           loc.repay_loan || "Repay Loan",
+        'btn-take-loan':            loc.take_loan || "Request a Loan",
+        'no-loan-title':            loc.no_active_loan || "No Active Loan",
+        'no-loan-sub':              loc.no_active_loan_sub || "Borrow money instantly.",
+        'loan-frozen-banner__title': loc.loan_frozen_title || "Account Frozen",
+        'loan-frozen-banner__sub':  loc.loan_frozen_sub,
+        // Org page
+        'org-no-account-title':     loc.org_no_account || "No Organization Account",
+        // Settings
+        'lbl-security-title':   loc.settings_title,
         'lbl-card-design-title': loc.card_design,
-        'lbl-avatar-title': loc.avatar_design || "Profile Picture",
-        'btn-update-avatar': loc.update_avatar || "Update Avatar",
-        'btn-remove-avatar': loc.reset_default || "Reset Default",
+        'lbl-avatar-title':     loc.avatar_design || "Profile Picture",
+        'btn-change-pin':       loc.change_pin_btn || "Update Code",
+        'btn-order-card':       loc.order_card || "Order Card",
+        'btn-remove-card':      loc.reset_default || "Reset Default",
+        'btn-update-avatar':    loc.update_avatar || "Update Avatar",
+        'btn-remove-avatar':    loc.reset_default || "Reset Default",
+        // Goal modal
         'lbl-update-goal-title': loc.update_goal_title,
-        'lbl-goal-name': loc.goal_name_label,
-        'lbl-goal-target': loc.goal_target_label,
-        'btn-save-goal': loc.save_goal,
-        'btn-cancel-goal': loc.cancel
+        'lbl-goal-name':         loc.goal_name_label,
+        'lbl-goal-target':       loc.goal_target_label,
+        'btn-save-goal':         loc.save_goal,
+        'btn-cancel-goal':       loc.cancel,
     };
 
     for (const [id, text] of Object.entries(mappings)) {
         const el = document.getElementById(id);
         if (el && text) el.innerText = text;
     }
+
+    // Loans warning banner uses innerHTML so we can bold the first line
+    const warnEl = document.querySelector('.loan-warning-banner__text');
+    if (warnEl && loc.loan_warning) {
+        warnEl.innerHTML = `<strong>${loc.loan_warning}</strong><span>${loc.loan_warning_sub || ''}</span>`;
+    }
+    // Org no-account sub text
+    const orgSubEl = document.querySelector('#org-no-account .no-loan-sub');
+    if (orgSubEl && loc.org_no_account_sub) orgSubEl.innerText = loc.org_no_account_sub;
 }
 
 let lastGoalData = null;
@@ -1440,6 +1466,150 @@ if (repayLoanBtn) {
     });
 }
 
+// ===== ADMIN DASHBOARD =====
+let adminPlayerList = [];
+let currentInspectCid = null;
+
+function openAdminDashboard(data) {
+    if (!data) return;
+    adminPlayerList = data.players || [];
+    const adminUI = document.getElementById('admin-ui');
+    if (!adminUI) return;
+    adminUI.style.display = 'flex';
+    shield.style.display = 'block';
+    setTimeout(() => adminUI.classList.add('show'), 20);
+    renderAdminPlayers();
+}
+
+function closeAdminUI() {
+    const adminUI = document.getElementById('admin-ui');
+    if (!adminUI) return;
+    adminUI.classList.remove('show');
+    setTimeout(() => {
+        adminUI.style.display = 'none';
+        shield.style.display = 'none';
+    }, 300);
+    fetch(`https://${GetParentResourceName()}/close`, { method: 'POST' });
+}
+
+function renderAdminPlayers() {
+    const list = document.getElementById('admin-player-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!adminPlayerList.length) {
+        list.innerHTML = '<div class="admin-no-players"><i class="fa-solid fa-users-slash"></i><br>No players online</div>';
+        return;
+    }
+    adminPlayerList.forEach(p => {
+        const initials = (p.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+        const row = document.createElement('div');
+        row.className = 'admin-player-row';
+        row.innerHTML = `
+            <div class="admin-player-avatar">${initials}</div>
+            <div class="admin-player-info">
+                <div class="admin-player-name">${p.name}<span class="admin-player-id">[${p.source}]</span></div>
+                <div class="admin-player-cid">${p.citizenid}</div>
+            </div>
+            <button class="admin-inspect-btn" data-cid="${p.citizenid}">
+                <i class="fa-solid fa-magnifying-glass"></i> Inspect
+            </button>`;
+        list.appendChild(row);
+    });
+
+    list.querySelectorAll('.admin-inspect-btn').forEach(btn => {
+        btn.addEventListener('click', () => openAdminInspect(btn.dataset.cid));
+    });
+}
+
+async function openAdminInspect(citizenid) {
+    currentInspectCid = citizenid;
+    const modal = document.getElementById('admin-inspect-modal');
+    const body  = document.getElementById('admin-inspect-body');
+    const actions = document.getElementById('admin-inspect-actions');
+    if (!modal) return;
+
+    body.innerHTML = '<div style="text-align:center;opacity:.5;padding:20px">Loading...</div>';
+    actions.innerHTML = '';
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+
+    const info = await fetch(`https://${GetParentResourceName()}/adminInspect`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ citizenid })
+    }).then(r => r.json());
+
+    if (!info) {
+        body.innerHTML = '<div style="text-align:center;color:#ef4444;padding:20px">Access denied or player not found.</div>';
+        return;
+    }
+
+    const isFrozen = info.loan?.locked;
+    const hasLoan  = !!info.loan && info.loan.amount > 0;
+
+    body.innerHTML = `
+        <div class="admin-info-row"><span class="admin-info-label">Citizen ID</span><span class="admin-info-value" style="font-family:monospace">${info.citizenid}</span></div>
+        <div class="admin-info-row"><span class="admin-info-label">Account No.</span><span class="admin-info-value">${info.accNo || '—'}</span></div>
+        <div class="admin-info-row"><span class="admin-info-label">Bank Balance</span><span class="admin-info-value">${(info.balance || 0).toLocaleString()} ${currencySymbol}</span></div>
+        <div class="admin-info-row">
+            <span class="admin-info-label">Account Status</span>
+            <span class="admin-info-value ${isFrozen ? 'frozen' : 'ok'}">${isFrozen ? '🔒 FROZEN' : '✅ Active'}</span>
+        </div>
+        <div class="admin-info-row">
+            <span class="admin-info-label">Active Loan</span>
+            <span class="admin-info-value ${hasLoan ? 'frozen' : 'ok'}">${hasLoan ? (info.loan.amount || 0).toLocaleString() + ' ' + currencySymbol : 'None'}</span>
+        </div>`;
+
+    actions.innerHTML = `
+        <button class="admin-action-btn ${isFrozen ? 'admin-action-btn--unfreeze' : 'admin-action-btn--freeze'}" id="admin-btn-freeze">
+            <i class="fa-solid ${isFrozen ? 'fa-lock-open' : 'fa-lock'}"></i>
+            ${isFrozen ? 'Unfreeze' : 'Freeze'} Account
+        </button>
+        <button class="admin-action-btn admin-action-btn--pin" id="admin-btn-pin">
+            <i class="fa-solid fa-key"></i> Reset PIN
+        </button>
+        ${hasLoan ? `<button class="admin-action-btn admin-action-btn--loan" id="admin-btn-loan" style="grid-column:1/-1">
+            <i class="fa-solid fa-trash-can"></i> Force Clear Loan
+        </button>` : ''}`;
+
+    document.getElementById('admin-btn-freeze')?.addEventListener('click', async () => {
+        const res = await fetch(`https://${GetParentResourceName()}/adminToggleFreeze`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ citizenid })
+        }).then(r => r.json());
+        if (res) {
+            showToast(`Account ${res.frozen ? 'frozen' : 'unfrozen'}`, res.frozen ? 'error' : 'success');
+            openAdminInspect(citizenid); // refresh
+        }
+    });
+
+    document.getElementById('admin-btn-pin')?.addEventListener('click', async () => {
+        const ok = await fetch(`https://${GetParentResourceName()}/adminResetPIN`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ citizenid })
+        }).then(r => r.json());
+        showToast(ok ? 'PIN reset to default' : 'Failed to reset PIN', ok ? 'success' : 'error');
+    });
+
+    document.getElementById('admin-btn-loan')?.addEventListener('click', async () => {
+        const ok = await fetch(`https://${GetParentResourceName()}/adminClearLoan`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ citizenid })
+        }).then(r => r.json());
+        if (ok) {
+            showToast('Loan cleared', 'success');
+            openAdminInspect(citizenid);
+        } else {
+            showToast('Failed to clear loan', 'error');
+        }
+    });
+}
+
+document.getElementById('admin-close-btn')?.addEventListener('click', closeAdminUI);
+document.getElementById('admin-modal-close')?.addEventListener('click', () => {
+    const modal = document.getElementById('admin-inspect-modal');
+    if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
+});
+
 window.addEventListener('message', (event) => {
     const action = event.data.action;
     if (action === 'open_pin') {
@@ -1450,6 +1620,9 @@ window.addEventListener('message', (event) => {
         showAtmQuip();
         document.body.style.background = "transparent";
         setTimeout(() => atmUI.classList.add('show'), 50);
+    } else if (action === 'open_admin') {
+        if (event.data.audio) configAudio = event.data.audio;
+        openAdminDashboard(event.data.data);
     } else if (action === 'open_bank') {
         if (event.data.audio) configAudio = event.data.audio;
         openBankDashboard(event.data.data, event.data.locale);

@@ -113,7 +113,10 @@ end)
 
 lib.callback.register('swisser_bank:getData', function(source, accountType)
     local citizenid = Bridge.GetIdentifier(source)
-    if not citizenid or not VerifyBankAccess(source) then return nil end
+    if not citizenid then return nil end
+    -- Note: getData is safe to call from any location (ATMs, bank, etc.).
+    -- All money-moving operations (deposit/withdraw/transfer) have their own
+    -- VerifyBankAccess / VerifyLaundryAccess checks.
 
     local account = accountType or 'personal'
 
@@ -215,6 +218,9 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
         CreateLog(citizenid, amount, 'outcome', 'To: ' .. accountNo, 'personal')
         CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. myShortAccount, 'personal')
         SendBankMail(targetData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency, "Wire Transfer")
+        -- Live notification to the receiver while they are online
+        TriggerClientEvent('swisser_bank:client:notify', targetSrc, 'success',
+            '💸 You received ' .. amount .. ' ' .. Config.Currency .. ' (from account ' .. myShortAccount .. ')')
     else
         -- Offline player transfer
         if CurrentFramework == 'qb' then
@@ -317,11 +323,12 @@ end)
 -- Per-player one-time admin tokens (cleared after use or 10 s expiry)
 local adminTokens = {}
 
+local function IsAdminSource(source)
+    return source and source ~= 0 and IsPlayerAceAllowed(source, 'command.god')
+end
+
 lib.callback.register('swisser_bank:getAdminData', function(source)
-    if not IsPlayerAceAllowed(source, 'command.god') then return nil end
-    local citizenid = Bridge.GetIdentifier(source)
-    if not citizenid then return nil end
-    -- Return a minimal admin payload (extend as needed)
+    if not IsAdminSource(source) then return nil end
     local players = {}
     for _, pid in ipairs(GetPlayers()) do
         local cid = Bridge.GetIdentifier(tonumber(pid))
@@ -334,6 +341,90 @@ lib.callback.register('swisser_bank:getAdminData', function(source)
         end
     end
     return { players = players }
+end)
+
+-- Admin: inspect a player (balance, loan status, freeze status)
+lib.callback.register('swisser_bank:adminInspect', function(source, targetCid)
+    if not IsAdminSource(source) then return nil end
+    if type(targetCid) ~= 'string' or targetCid == '' then return nil end
+
+    local targetSrc = Bridge.GetPlayerByCID(targetCid)
+    local balance = 0
+    if targetSrc then
+        balance = Bridge.GetBankBalance(targetSrc)
+    else
+        -- Offline: read from DB
+        if CurrentFramework == 'qb' then
+            local row = exports.oxmysql:single_async('SELECT money FROM players WHERE citizenid = ?', { targetCid })
+            if row then
+                local ok, money = pcall(json.decode, row.money)
+                if ok and money then balance = money.bank or 0 end
+            end
+        else
+            balance = exports.oxmysql:scalar_async('SELECT `bank` FROM `users` WHERE `identifier` = ?', { targetCid }) or 0
+        end
+    end
+
+    local loan = exports.oxmysql:single_async('SELECT amount, account_locked FROM swisser_bank_loans WHERE citizenid = ?', { targetCid })
+    local accNo = exports.oxmysql:scalar_async('SELECT account_no FROM swisser_bank_pins WHERE citizenid = ?', { targetCid })
+
+    return {
+        citizenid = targetCid,
+        balance   = balance,
+        accNo     = accNo,
+        loan      = loan and { amount = loan.amount, locked = loan.account_locked == 1 } or nil,
+    }
+end)
+
+-- Admin: toggle account freeze (loan must exist)
+lib.callback.register('swisser_bank:adminToggleFreeze', function(source, targetCid)
+    if not IsAdminSource(source) then return false end
+    if type(targetCid) ~= 'string' or targetCid == '' then return false end
+
+    local loan = exports.oxmysql:single_async('SELECT account_locked FROM swisser_bank_loans WHERE citizenid = ?', { targetCid })
+    if not loan then
+        -- No loan — create a freeze-only record so we can block the account
+        exports.oxmysql:execute([[
+            INSERT INTO swisser_bank_loans (citizenid, amount, original_amount, interest_rate, due_date, account_locked)
+            VALUES (?, 0, 0, 0, NOW(), 1)
+            ON DUPLICATE KEY UPDATE account_locked = 1
+        ]], { targetCid })
+        local tSrc = Bridge.GetPlayerByCID(targetCid)
+        if tSrc then TriggerClientEvent('swisser_bank:client:notify', tSrc, 'error', '🔒 Your account has been frozen by an administrator.') end
+        return { frozen = true }
+    end
+
+    local newLocked = loan.account_locked == 1 and 0 or 1
+    exports.oxmysql:execute('UPDATE swisser_bank_loans SET account_locked = ? WHERE citizenid = ?', { newLocked, targetCid })
+    local tSrc = Bridge.GetPlayerByCID(targetCid)
+    if tSrc then
+        if newLocked == 1 then
+            TriggerClientEvent('swisser_bank:client:notify', tSrc, 'error', '🔒 Your account has been frozen by an administrator.')
+        else
+            TriggerClientEvent('swisser_bank:client:notify', tSrc, 'success', '✅ Your account has been unfrozen by an administrator.')
+        end
+    end
+    return { frozen = newLocked == 1 }
+end)
+
+-- Admin: reset PIN to server default
+lib.callback.register('swisser_bank:adminResetPIN', function(source, targetCid)
+    if not IsAdminSource(source) then return false end
+    if type(targetCid) ~= 'string' or targetCid == '' then return false end
+    exports.oxmysql:execute('UPDATE swisser_bank_pins SET pin = ? WHERE citizenid = ?', { Config.DefaultPIN, targetCid })
+    local tSrc = Bridge.GetPlayerByCID(targetCid)
+    if tSrc then TriggerClientEvent('swisser_bank:client:notify', tSrc, 'inform', 'ℹ️ Your bank PIN has been reset by an administrator.') end
+    return true
+end)
+
+-- Admin: force-clear an active loan
+lib.callback.register('swisser_bank:adminClearLoan', function(source, targetCid)
+    if not IsAdminSource(source) then return false end
+    if type(targetCid) ~= 'string' or targetCid == '' then return false end
+    exports.oxmysql:execute('DELETE FROM swisser_bank_loans WHERE citizenid = ?', { targetCid })
+    local tSrc = Bridge.GetPlayerByCID(targetCid)
+    if tSrc then TriggerClientEvent('swisser_bank:client:notify', tSrc, 'success', '✅ Your loan has been cleared by an administrator.') end
+    return true
 end)
 
 -- /bankadmin — opens the in-game admin dashboard for authorised staff

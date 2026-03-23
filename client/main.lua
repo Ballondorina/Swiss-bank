@@ -139,15 +139,17 @@ local function HandleLaundryInteraction()
         local now = os.time()
         if pending.readyAt > now then
             local secsLeft = pending.readyAt - now
-            ShowLaundryDialogue(Config.LaundryDialogue.not_ready:format(secsLeft))
+            ShowLaundryDialogue(L('laundry_not_ready'):format(secsLeft))
         else
             -- Ready to collect
-            ShowLaundryDialogue("Your money is ready. Let me get it...")
+            ShowLaundryDialogue(L('laundry_ready'))
             Wait(1500)
             local result = lib.callback.await('swisser_bank:collectLaundry', false)
             if result and result.ok then
                 ShowLaundryDialogue(result.msg)
-                TriggerEvent('swisser_bank:client:notify', 'success', '💵 Received ' .. result.amount .. ' ' .. Config.Currency .. ' (clean)')
+                if SendNotification then
+                    SendNotification('💵 Received ' .. result.amount .. ' ' .. Config.Currency .. ' (clean)', 'success')
+                end
             else
                 ShowLaundryDialogue(result and result.msg or "Something went wrong.")
             end
@@ -156,7 +158,7 @@ local function HandleLaundryInteraction()
     end
 
     -- No pending job — ask for amount
-    ShowLaundryDialogue(Config.LaundryDialogue.greeting)
+    ShowLaundryDialogue(L('laundry_greeting'))
     Wait(1000)
 
     local input = lib.inputDialog('Money Laundering', {
@@ -213,7 +215,7 @@ CreateThread(function()
             {
                 name = 'swisser_laundry',
                 icon = 'fa-solid fa-money-bill-wave',
-                label = 'Talk to him...',
+                label = L('laundry_talk'),
                 distance = 2.0,
                 onSelect = HandleLaundryInteraction,
             }
@@ -348,5 +350,26 @@ end)
 
 RegisterNUICallback('repayLoan', function(_, cb)
     local result = lib.callback.await('swisser_bank:repayLoan', false)
+    cb(result)
+end)
+
+-- Admin dashboard NUI callbacks (server validates ace permission each call)
+RegisterNUICallback('adminInspect', function(data, cb)
+    local result = lib.callback.await('swisser_bank:adminInspect', false, data.citizenid)
+    cb(result)
+end)
+
+RegisterNUICallback('adminToggleFreeze', function(data, cb)
+    local result = lib.callback.await('swisser_bank:adminToggleFreeze', false, data.citizenid)
+    cb(result)
+end)
+
+RegisterNUICallback('adminResetPIN', function(data, cb)
+    local result = lib.callback.await('swisser_bank:adminResetPIN', false, data.citizenid)
+    cb(result)
+end)
+
+RegisterNUICallback('adminClearLoan', function(data, cb)
+    local result = lib.callback.await('swisser_bank:adminClearLoan', false, data.citizenid)
     cb(result)
 end)
