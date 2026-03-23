@@ -463,6 +463,7 @@ function setActivePage(pageId, labelEl) {
     if (pageId === 'overview') setTimeout(initChart, 100);
     if (pageId === 'mailbox') markMailsAsRead();
     if (pageId === 'loans') loadLoanData();
+    if (pageId === 'org') loadOrgData();
 }
 
 document.querySelectorAll('.sidebar-item').forEach(item => {
@@ -1003,6 +1004,213 @@ function keyPressed() {
     key.classList.add('pressed');
     setTimeout(() => key.classList.remove('pressed'), 200);
 }
+
+// ===== ORGANIZATION PAGE =====
+let currentOrgData = null;
+
+function loadOrgData() {
+    fetch(`https://${GetParentResourceName()}/getOrgData`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+    }).then(r => r.json()).then(data => renderOrgUI(data));
+}
+
+function renderOrgUI(data) {
+    const noAcc   = document.getElementById('org-no-account');
+    const main    = document.getElementById('org-main');
+    const sidebarItem = document.getElementById('sidebar-org');
+
+    if (!data) {
+        // Not in a gang or not a member — hide sidebar tab
+        if (sidebarItem) sidebarItem.classList.add('hidden');
+        return;
+    }
+
+    if (sidebarItem) sidebarItem.classList.remove('hidden');
+    currentOrgData = data;
+
+    if (data.noAccount) {
+        noAcc.classList.remove('hidden');
+        main.classList.add('hidden');
+        const title = document.getElementById('org-no-account-title');
+        if (title) title.innerText = `No account for "${data.gangName}"`;
+        return;
+    }
+
+    noAcc.classList.add('hidden');
+    main.classList.remove('hidden');
+
+    // Header
+    document.getElementById('org-name-display').innerText = data.label || data.orgId;
+    document.getElementById('org-account-no-display').innerText = data.accountNo || '—';
+    document.getElementById('org-balance-display').innerText = `${(data.balance || 0).toLocaleString()} ${currencySymbol}`;
+
+    const roleBadge = document.getElementById('org-role-badge');
+    if (roleBadge) {
+        roleBadge.innerText = (data.myRole || 'member').toUpperCase();
+        roleBadge.className = `org-role-badge org-role-${data.myRole || 'member'}`;
+    }
+
+    // Show/hide admin controls
+    const canManage = data.myRole === 'owner';
+    const canWithdraw = data.myRole === 'owner' || data.myRole === 'admin';
+    document.getElementById('org-withdraw-group')?.classList.toggle('hidden', !canWithdraw);
+    document.getElementById('org-transfer-group')?.classList.toggle('hidden', !canWithdraw);
+    document.getElementById('org-btn-add-member')?.classList.toggle('hidden', !canManage);
+
+    renderOrgMembers(data.members, data.myRole, data.orgId);
+    renderOrgTransactions(data.transactions);
+}
+
+function renderOrgMembers(members, myRole, orgId) {
+    const list = document.getElementById('org-member-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!members || !members.length) {
+        list.innerHTML = '<div class="no-loan-sub" style="padding:12px 0">No members yet.</div>';
+        return;
+    }
+    const roleIcons = { owner: '👑', admin: '⚙️', member: '👤' };
+    members.forEach(m => {
+        const name = [m.fname, m.lname].filter(Boolean).join(' ') || m.citizenid;
+        const isMe = m.citizenid === currentOrgData?.myRole; // rough check
+        const row = document.createElement('div');
+        row.className = 'org-member-row';
+        row.innerHTML = `
+            <div class="org-member-avatar">${(name[0] || '?').toUpperCase()}</div>
+            <div class="org-member-info">
+                <div class="org-member-name">${name}</div>
+                <div class="org-member-role-text">${roleIcons[m.role] || '👤'} ${(m.role || 'member').charAt(0).toUpperCase() + m.role.slice(1)}</div>
+            </div>
+            ${myRole === 'owner' && m.role !== 'owner' ? `
+            <div class="org-member-actions">
+                <button class="org-role-btn" data-cid="${m.citizenid}" data-role="${m.role === 'admin' ? 'member' : 'admin'}">
+                    ${m.role === 'admin' ? '↓ Demote' : '↑ Promote'}
+                </button>
+                <button class="org-remove-btn" data-cid="${m.citizenid}">✕</button>
+            </div>` : ''}
+        `;
+        list.appendChild(row);
+    });
+
+    // Promote/demote
+    list.querySelectorAll('.org-role-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cid = btn.dataset.cid, role = btn.dataset.role;
+            fetch(`https://${GetParentResourceName()}/orgSetRole`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ citizenid: cid, role })
+            }).then(r => r.json()).then(ok => { if (ok) loadOrgData(); });
+        });
+    });
+
+    // Remove
+    list.querySelectorAll('.org-remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            fetch(`https://${GetParentResourceName()}/orgRemoveMember`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ citizenid: btn.dataset.cid })
+            }).then(r => r.json()).then(ok => { if (ok) loadOrgData(); });
+        });
+    });
+}
+
+function renderOrgTransactions(txs) {
+    const list = document.getElementById('org-tx-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!txs || !txs.length) {
+        list.innerHTML = '<div class="no-loan-sub" style="padding:12px 0">No activity yet.</div>';
+        return;
+    }
+    txs.forEach(t => {
+        const isIn = t.type === 'income';
+        const row = document.createElement('div');
+        row.className = 'transaction-row';
+        row.innerHTML = `
+            <div class="transaction-details">
+                <div class="transaction-icon ${isIn ? 'income' : 'outcome'}">
+                    <i class="fa-solid ${isIn ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
+                </div>
+                <div class="transaction-meta">
+                    <div style="font-weight:700;font-size:15px">${t.label}</div>
+                    <div style="font-size:12px;opacity:.45">${t.player_name} &bull; ${new Date(t.date).toLocaleString()}</div>
+                </div>
+            </div>
+            <div class="${isIn ? 'text-income' : 'text-outcome'}">
+                ${isIn ? '+' : '-'}${t.amount.toLocaleString()} ${currencySymbol}
+            </div>`;
+        list.appendChild(row);
+    });
+}
+
+// Org deposit
+document.getElementById('org-btn-deposit')?.addEventListener('click', () => {
+    const inp = document.getElementById('org-inp-deposit');
+    const amt = getNumericValue(inp);
+    if (!amt || amt <= 0) return;
+    fetch(`https://${GetParentResourceName()}/orgDeposit`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt })
+    }).then(r => r.json()).then(ok => { if (ok) { inp.value = ''; loadOrgData(); playSound(configAudio.Success, 0.5); } });
+});
+
+// Org withdraw
+document.getElementById('org-btn-withdraw')?.addEventListener('click', () => {
+    const inp = document.getElementById('org-inp-withdraw');
+    const amt = getNumericValue(inp);
+    if (!amt || amt <= 0) return;
+    fetch(`https://${GetParentResourceName()}/orgWithdraw`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt })
+    }).then(r => r.json()).then(ok => { if (ok) { inp.value = ''; loadOrgData(); playSound(configAudio.Success, 0.5); } });
+});
+
+// Org transfer
+document.getElementById('org-btn-transfer')?.addEventListener('click', () => {
+    const ibanInp = document.getElementById('org-inp-transfer-iban');
+    const amtInp  = document.getElementById('org-inp-transfer-amount');
+    const iban = ibanInp?.value.trim();
+    const amt  = getNumericValue(amtInp);
+    if (!iban || !amt || amt <= 0) return;
+    fetch(`https://${GetParentResourceName()}/orgTransfer`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iban, amount: amt })
+    }).then(r => r.json()).then(ok => {
+        if (ok) { ibanInp.value = ''; amtInp.value = ''; loadOrgData(); playSound(configAudio.Success, 0.5); }
+    });
+});
+
+// Add member toggle
+document.getElementById('org-btn-add-member')?.addEventListener('click', () => {
+    const form = document.getElementById('org-add-member-form');
+    form?.classList.toggle('hidden');
+});
+
+document.getElementById('org-btn-confirm-add')?.addEventListener('click', () => {
+    const inp = document.getElementById('org-inp-add-acc');
+    const accNo = inp?.value.trim();
+    if (!accNo) return;
+    fetch(`https://${GetParentResourceName()}/orgAddMember`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountNo: accNo })
+    }).then(r => r.json()).then(res => {
+        if (res?.ok) {
+            inp.value = '';
+            document.getElementById('org-add-member-form')?.classList.add('hidden');
+            showToast(`${res.name} added as member`, 'success');
+            loadOrgData();
+        } else {
+            showToast(res?.reason || 'Could not add member.', 'error');
+        }
+    });
+});
+
+// Number formatting for org inputs
+['org-inp-deposit','org-inp-withdraw','org-inp-transfer-amount'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('keydown', e => {
+        if ([46,8,9,27,13].includes(e.keyCode)||(e.keyCode>=35&&e.keyCode<=40)) return;
+        if ((e.shiftKey||(e.keyCode<48||e.keyCode>57))&&(e.keyCode<96||e.keyCode>105)) e.preventDefault();
+    });
+    el.addEventListener('input', () => formatNumberInput(el));
+});
 
 // ===== TOAST =====
 function showToast(message, type = 'info', duration = 3500) {

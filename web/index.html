@@ -74,6 +74,10 @@
                             <i class="fa-solid fa-hand-holding-dollar"></i><span id="lbl-loans">Loans</span>
                             <span id="loan-badge" class="sidebar-badge loan-badge hidden">!</span>
                         </div>
+                        <div class="sidebar-item hidden" id="sidebar-org" data-page="org">
+                            <i class="fa-solid fa-shield-halved"></i><span id="lbl-org">Organization</span>
+                            <span id="org-badge" class="sidebar-badge org-badge hidden">!</span>
+                        </div>
                         <div class="sidebar-item" data-page="mailbox">
                             <i class="fa-solid fa-envelope"></i><span id="lbl-mailbox">Mailbox</span>
                             <span id="mail-badge" class="sidebar-badge hidden">0</span>
@@ -384,6 +388,83 @@
                                     <i class="fa-solid fa-hand-holding-dollar"></i> Request Loan
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== ORGANIZATION PAGE ===== -->
+                    <div id="page-org" class="page-content hidden">
+
+                        <!-- No account placeholder -->
+                        <div id="org-no-account" class="no-loan-card hidden">
+                            <div class="no-loan-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                            <div class="no-loan-title" id="org-no-account-title">No Organization Account</div>
+                            <div class="no-loan-sub">Your organization does not have a bank account yet. Contact an admin.</div>
+                        </div>
+
+                        <!-- Org header card -->
+                        <div id="org-main" class="hidden">
+                            <div class="org-header-card">
+                                <div class="org-header-left">
+                                    <div class="org-header-label">ORGANIZATION</div>
+                                    <div class="org-name" id="org-name-display">—</div>
+                                    <div class="org-account-no"><i class="fa-solid fa-hashtag"></i> <span id="org-account-no-display">—</span></div>
+                                </div>
+                                <div class="org-header-right">
+                                    <div class="org-header-label">BALANCE</div>
+                                    <div class="org-balance" id="org-balance-display">0 $</div>
+                                    <div class="org-role-badge" id="org-role-badge">member</div>
+                                </div>
+                            </div>
+
+                            <!-- Actions row -->
+                            <div class="org-actions-row">
+                                <div class="action-group">
+                                    <div class="action-group-label">DEPOSIT (cash)</div>
+                                    <input type="text" class="form-control" id="org-inp-deposit" placeholder="Amount" inputmode="numeric" pattern="[0-9,]*">
+                                    <button class="btn-action btn-deposit-action btn-full" id="org-btn-deposit">
+                                        <i class="fa-solid fa-plus"></i> Deposit
+                                    </button>
+                                </div>
+                                <div class="action-group" id="org-withdraw-group">
+                                    <div class="action-group-label">WITHDRAW (cash)</div>
+                                    <input type="text" class="form-control" id="org-inp-withdraw" placeholder="Amount" inputmode="numeric" pattern="[0-9,]*">
+                                    <button class="btn-action btn-withdraw-action btn-full" id="org-btn-withdraw">
+                                        <i class="fa-solid fa-minus"></i> Withdraw
+                                    </button>
+                                </div>
+                                <div class="action-group" id="org-transfer-group">
+                                    <div class="action-group-label">TRANSFER OUT</div>
+                                    <input type="text" class="form-control" id="org-inp-transfer-iban" placeholder="Account No.">
+                                    <input type="text" class="form-control" id="org-inp-transfer-amount" placeholder="Amount" inputmode="numeric" pattern="[0-9,]*">
+                                    <button class="btn-action btn-blue btn-full" id="org-btn-transfer">
+                                        <i class="fa-solid fa-paper-plane"></i> Transfer
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Members -->
+                            <div class="section-header" style="margin-top:22px;">
+                                <h4 class="section-title"><i class="fa-solid fa-users"></i> Members</h4>
+                                <button class="icon-btn" id="org-btn-add-member" title="Add member by account number">
+                                    <i class="fa-solid fa-user-plus"></i>
+                                </button>
+                            </div>
+
+                            <!-- Add member form (hidden by default) -->
+                            <div id="org-add-member-form" class="org-add-member-form hidden">
+                                <input type="text" class="form-control" id="org-inp-add-acc" placeholder="Member's Account Number">
+                                <button class="btn-action btn-deposit-action" id="org-btn-confirm-add">
+                                    <i class="fa-solid fa-check"></i> Add
+                                </button>
+                            </div>
+
+                            <div id="org-member-list" class="org-member-list"></div>
+
+                            <!-- Activity log -->
+                            <div class="section-header" style="margin-top:22px;">
+                                <h4 class="section-title"><i class="fa-solid fa-clock-rotate-left"></i> Activity Log</h4>
+                            </div>
+                            <div id="org-tx-list" class="transaction-scroll-area"></div>
                         </div>
                     </div>
 

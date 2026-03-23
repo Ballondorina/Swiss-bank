@@ -36,4 +36,18 @@ RegisterNetEvent('esx:setJob', function(job)
     PlayerData.job = job
 end)
 
+-- Returns gang name + isBoss for the local player
+function Bridge.GetGangClient()
+    local pd = Bridge.GetPlayerData()
+    if not pd then return nil, false end
+    if CurrentFramework == 'qb' then
+        local gang = pd.gang
+        if not gang or gang.name == 'none' then return nil, false end
+        return gang.name, gang.isboss == true
+    else
+        local job = pd.job
+        return job and job.name or nil, job and job.grade_level >= 3 or false
+    end
+end
+
 -- Bridge is global, no return needed

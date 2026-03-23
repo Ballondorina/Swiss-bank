@@ -1,10 +1,12 @@
 local dbReady = false
 local Cooldowns = {}
 
-local function GenerateAccountNumber()
+local function GenerateAccountNumber(tableCheck)
+    tableCheck = tableCheck or 'swisser_bank_pins'
     for _ = 1, 100 do
         local number = tostring(math.random(111111, 999999))
-        local check = exports.oxmysql:scalar_async('SELECT citizenid FROM swisser_bank_pins WHERE account_no = ?', { number })
+        local col = tableCheck == 'swisser_bank_org_accounts' and 'org_id' or 'citizenid'
+        local check = exports.oxmysql:scalar_async('SELECT `' .. col .. '` FROM `' .. tableCheck .. '` WHERE account_no = ?', { number })
         if not check then return number end
     end
     -- Fallback: use time-based number if all random attempts collide
@@ -484,4 +486,344 @@ CreateThread(function()
 
         ::continue::
     end
+end)
+
+-- ============================================================
+-- GANG / ORGANIZATION ACCOUNTS
+-- ============================================================
+
+local function IsGangAllowed(gangName)
+    for _, entry in ipairs(Config.AllowedGangAccounts) do
+        if entry.gang == gangName then return true, entry.label end
+    end
+    return false, nil
+end
+
+local function GetOrgRole(orgId, citizenid)
+    local row = exports.oxmysql:scalar_async(
+        'SELECT role FROM swisser_bank_org_members WHERE org_id = ? AND citizenid = ?',
+        { orgId, citizenid }
+    )
+    return row -- 'owner', 'admin', 'member', or nil
+end
+
+local function LogOrgTransaction(orgId, citizenid, playerName, amount, txType, label)
+    exports.oxmysql:insert([[
+        INSERT INTO swisser_bank_org_transactions (org_id, citizenid, player_name, amount, type, label)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ]], { orgId, citizenid, playerName, amount, txType, label })
+end
+
+-- Admin command: /bankcreateorg [gangname]
+RegisterCommand(Config.GangAccountCommand, function(source, args)
+    if source ~= 0 and not IsPlayerAceAllowed(source, 'command.god') then
+        if source ~= 0 then
+            TriggerClientEvent('swisser_bank:client:notify', source, 'error', 'No permission.')
+        end
+        return
+    end
+    local gangName = args[1] and args[1]:lower()
+    if not gangName then
+        print('[SwisserBank] Usage: /' .. Config.GangAccountCommand .. ' [gangname]')
+        return
+    end
+    local allowed, label = IsGangAllowed(gangName)
+    if not allowed then
+        local msg = '[SwisserBank] Gang "' .. gangName .. '" is not in Config.AllowedGangAccounts.'
+        print(msg)
+        if source ~= 0 then TriggerClientEvent('swisser_bank:client:notify', source, 'error', msg) end
+        return
+    end
+    local existing = exports.oxmysql:scalar_async('SELECT org_id FROM swisser_bank_org_accounts WHERE org_id = ?', { gangName })
+    if existing then
+        local msg = '[SwisserBank] Org account for "' .. gangName .. '" already exists.'
+        print(msg)
+        if source ~= 0 then TriggerClientEvent('swisser_bank:client:notify', source, 'error', msg) end
+        return
+    end
+    local accNo = GenerateAccountNumber('swisser_bank_org_accounts')
+    exports.oxmysql:insert('INSERT INTO swisser_bank_org_accounts (org_id, label, balance, account_no) VALUES (?, ?, 0, ?)',
+        { gangName, label, accNo })
+    local msg = '[SwisserBank] Org account created for "' .. gangName .. '" (acc: ' .. accNo .. ')'
+    print(msg)
+    if source ~= 0 then TriggerClientEvent('swisser_bank:client:notify', source, 'success', msg) end
+end, true)
+
+-- Get org data for the player's gang
+lib.callback.register('swisser_bank:getOrgData', function(source)
+    if not Config.GangAccountEnabled then return nil end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return nil end
+    local gangName, isBoss = Bridge.GetGang(source)
+    if not gangName then return nil end
+
+    local org = exports.oxmysql:single_async('SELECT * FROM swisser_bank_org_accounts WHERE org_id = ?', { gangName })
+    if not org then return { noAccount = true, gangName = gangName, isBoss = isBoss } end
+
+    local role = GetOrgRole(gangName, citizenid)
+
+    -- Auto-add boss on first open if they're in the gang
+    if isBoss and not role then
+        exports.oxmysql:insert('INSERT IGNORE INTO swisser_bank_org_members (org_id, citizenid, role, added_by) VALUES (?, ?, ?, ?)',
+            { gangName, citizenid, 'owner', citizenid })
+        role = 'owner'
+    end
+
+    if not role then return nil end -- not a member
+
+    local members = exports.oxmysql:query_async([[
+        SELECT m.citizenid, m.role, m.added_at,
+               JSON_VALUE(p.charinfo, '$.firstname') AS fname,
+               JSON_VALUE(p.charinfo, '$.lastname')  AS lname
+        FROM swisser_bank_org_members m
+        LEFT JOIN players p ON m.citizenid = p.citizenid
+        WHERE m.org_id = ?
+        ORDER BY FIELD(m.role,'owner','admin','member'), m.added_at ASC
+    ]], { gangName })
+
+    local txs = exports.oxmysql:query_async([[
+        SELECT * FROM swisser_bank_org_transactions
+        WHERE org_id = ? ORDER BY date DESC LIMIT 20
+    ]], { gangName })
+
+    return {
+        orgId      = gangName,
+        label      = org.label,
+        balance    = org.balance,
+        accountNo  = org.account_no,
+        myRole     = role,
+        isBoss     = isBoss,
+        members    = members or {},
+        transactions = txs or {},
+    }
+end)
+
+-- Deposit cash → org account (all roles)
+lib.callback.register('swisser_bank:orgDeposit', function(source, amount)
+    if not Config.GangAccountEnabled then return false end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return false end
+    local gangName = Bridge.GetGang(source)
+    if not gangName then return false end
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return false end
+    if not GetOrgRole(gangName, citizenid) then return false end
+
+    if Bridge.AdjustMoney(source, 'cash', amount, 'remove', 'Org Deposit') then
+        exports.oxmysql:execute('UPDATE swisser_bank_org_accounts SET balance = balance + ? WHERE org_id = ?', { amount, gangName })
+        LogOrgTransaction(gangName, citizenid, Bridge.GetName(source), amount, 'income', 'Deposit by ' .. Bridge.GetName(source))
+        TriggerClientEvent('swisser_bank:client:notify', source, 'success', 'Deposited ' .. amount .. ' to org account.')
+        return true
+    end
+    TriggerClientEvent('swisser_bank:client:notify', source, 'error', 'Not enough cash.')
+    return false
+end)
+
+-- Withdraw from org account (admin/owner only)
+lib.callback.register('swisser_bank:orgWithdraw', function(source, amount)
+    if not Config.GangAccountEnabled then return false end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return false end
+    local gangName = Bridge.GetGang(source)
+    if not gangName then return false end
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return false end
+    local role = GetOrgRole(gangName, citizenid)
+    if role == 'member' or not role then
+        TriggerClientEvent('swisser_bank:client:notify', source, 'error', 'No permission to withdraw.')
+        return false
+    end
+    local org = exports.oxmysql:single_async('SELECT balance FROM swisser_bank_org_accounts WHERE org_id = ?', { gangName })
+    if not org or org.balance < amount then
+        TriggerClientEvent('swisser_bank:client:notify', source, 'error', 'Insufficient org funds.')
+        return false
+    end
+    exports.oxmysql:execute('UPDATE swisser_bank_org_accounts SET balance = balance - ? WHERE org_id = ?', { amount, gangName })
+    Bridge.AdjustMoney(source, 'cash', amount, 'add', 'Org Withdrawal')
+    LogOrgTransaction(gangName, citizenid, Bridge.GetName(source), amount, 'outcome', 'Withdrawal by ' .. Bridge.GetName(source))
+    TriggerClientEvent('swisser_bank:client:notify', source, 'success', 'Withdrew ' .. amount .. ' from org account.')
+    return true
+end)
+
+-- Transfer from org account to a player (admin/owner only)
+lib.callback.register('swisser_bank:orgTransfer', function(source, targetAccNo, amount)
+    if not Config.GangAccountEnabled then return false end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return false end
+    local gangName = Bridge.GetGang(source)
+    if not gangName then return false end
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return false end
+    local role = GetOrgRole(gangName, citizenid)
+    if role == 'member' or not role then
+        TriggerClientEvent('swisser_bank:client:notify', source, 'error', 'No permission to transfer.')
+        return false
+    end
+    local org = exports.oxmysql:single_async('SELECT balance FROM swisser_bank_org_accounts WHERE org_id = ?', { gangName })
+    if not org or org.balance < amount then
+        TriggerClientEvent('swisser_bank:client:notify', source, 'error', 'Insufficient org funds.')
+        return false
+    end
+    local target = exports.oxmysql:single_async('SELECT citizenid FROM swisser_bank_pins WHERE account_no = ?', { targetAccNo })
+    if not target then
+        TriggerClientEvent('swisser_bank:client:notify', source, 'error', 'Account not found.')
+        return false
+    end
+    exports.oxmysql:execute('UPDATE swisser_bank_org_accounts SET balance = balance - ? WHERE org_id = ?', { amount, gangName })
+    local targetSrc = Bridge.GetPlayerByCID(target.citizenid)
+    if targetSrc then
+        Bridge.AdjustMoney(targetSrc, 'bank', amount, 'add', 'Org Transfer')
+    else
+        -- Offline: update DB directly (QBCore)
+        if CurrentFramework == 'qb' then
+            local row = exports.oxmysql:single_async('SELECT money FROM players WHERE citizenid = ?', { target.citizenid })
+            if row then
+                local money = json.decode(row.money)
+                money.bank = money.bank + amount
+                exports.oxmysql:execute('UPDATE players SET money = ? WHERE citizenid = ?', { json.encode(money), target.citizenid })
+            end
+        end
+    end
+    LogOrgTransaction(gangName, citizenid, Bridge.GetName(source), amount, 'outcome', 'Transfer to ' .. targetAccNo)
+    CreateLog(target.citizenid, amount, 'income', 'From org: ' .. gangName, 'personal')
+    SendBankMail(target.citizenid, 'Org Transfer Received', 'You received ' .. amount .. ' ' .. Config.Currency .. ' from ' .. gangName .. ' organization account.', gangName)
+    TriggerClientEvent('swisser_bank:client:notify', source, 'success', 'Transferred ' .. amount .. ' to ' .. targetAccNo)
+    return true
+end)
+
+-- Add a member by account number (owner only)
+lib.callback.register('swisser_bank:orgAddMember', function(source, targetAccNo)
+    if not Config.GangAccountEnabled then return { ok = false } end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return { ok = false } end
+    local gangName = Bridge.GetGang(source)
+    if not gangName then return { ok = false } end
+    if GetOrgRole(gangName, citizenid) ~= 'owner' then
+        return { ok = false, reason = 'No permission.' }
+    end
+    local targetPin = exports.oxmysql:single_async([[
+        SELECT p.citizenid, JSON_VALUE(pl.charinfo,'$.firstname') AS fname,
+               JSON_VALUE(pl.charinfo,'$.lastname') AS lname
+        FROM swisser_bank_pins p LEFT JOIN players pl ON p.citizenid = pl.citizenid
+        WHERE p.account_no = ?
+    ]], { targetAccNo })
+    if not targetPin then return { ok = false, reason = 'Account not found.' } end
+    if targetPin.citizenid == citizenid then return { ok = false, reason = 'Cannot add yourself.' } end
+    local exists = exports.oxmysql:scalar_async('SELECT role FROM swisser_bank_org_members WHERE org_id = ? AND citizenid = ?',
+        { gangName, targetPin.citizenid })
+    if exists then return { ok = false, reason = 'Already a member.' } end
+    exports.oxmysql:insert('INSERT INTO swisser_bank_org_members (org_id, citizenid, role, added_by) VALUES (?, ?, ?, ?)',
+        { gangName, targetPin.citizenid, 'member', citizenid })
+    local name = (targetPin.fname or '') .. ' ' .. (targetPin.lname or '')
+    return { ok = true, name = name:match('^%s*(.-)%s*$') }
+end)
+
+-- Remove a member (owner only)
+lib.callback.register('swisser_bank:orgRemoveMember', function(source, targetCid)
+    if not Config.GangAccountEnabled then return false end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return false end
+    local gangName = Bridge.GetGang(source)
+    if not gangName or GetOrgRole(gangName, citizenid) ~= 'owner' then return false end
+    if targetCid == citizenid then return false end -- can't remove self
+    exports.oxmysql:execute('DELETE FROM swisser_bank_org_members WHERE org_id = ? AND citizenid = ?', { gangName, targetCid })
+    return true
+end)
+
+-- Set member role (owner only)
+lib.callback.register('swisser_bank:orgSetRole', function(source, targetCid, newRole)
+    if not Config.GangAccountEnabled then return false end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return false end
+    local gangName = Bridge.GetGang(source)
+    if not gangName or GetOrgRole(gangName, citizenid) ~= 'owner' then return false end
+    if targetCid == citizenid then return false end
+    if newRole ~= 'admin' and newRole ~= 'member' then return false end
+    exports.oxmysql:execute('UPDATE swisser_bank_org_members SET role = ? WHERE org_id = ? AND citizenid = ?',
+        { newRole, gangName, targetCid })
+    return true
+end)
+
+-- ============================================================
+-- MONEY LAUNDERING
+-- ============================================================
+
+lib.callback.register('swisser_bank:submitLaundry', function(source, amount)
+    if not Config.LaundryEnabled then return { ok = false, msg = 'Service unavailable.' } end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid or not CheckCooldown(source) then return { ok = false, msg = 'Too fast.' } end
+    amount = math.floor(tonumber(amount) or 0)
+
+    local minFmt = tostring(Config.LaundryMinAmount)
+    local maxFmt = tostring(Config.LaundryMaxAmount)
+
+    if amount < Config.LaundryMinAmount then
+        return { ok = false, msg = Config.LaundryDialogue.too_little:format(minFmt) }
+    end
+    if amount > Config.LaundryMaxAmount then
+        return { ok = false, msg = Config.LaundryDialogue.too_much:format(maxFmt) }
+    end
+
+    -- Check for existing pending job
+    local existing = exports.oxmysql:single_async('SELECT ready_at, collected FROM swisser_bank_laundry WHERE citizenid = ?', { citizenid })
+    if existing and existing.collected == 0 then
+        local now = os.time()
+        if existing.ready_at > now then
+            local secsLeft = existing.ready_at - now
+            return { ok = false, msg = Config.LaundryDialogue.not_ready:format(secsLeft) }
+        else
+            return { ok = false, msg = Config.LaundryDialogue.already_has }
+        end
+    end
+
+    -- Check black money
+    local dirty = Bridge.GetBlackMoney(source)
+    if dirty < amount then
+        return { ok = false, msg = Config.LaundryDialogue.no_dirty }
+    end
+
+    local cleanAmount = math.floor(amount * (1 - Config.LaundryFee))
+    local readyAt = os.time() + Config.LaundryTime
+
+    Bridge.AdjustBlackMoney(source, amount, 'remove')
+    exports.oxmysql:execute([[
+        INSERT INTO swisser_bank_laundry (citizenid, amount_dirty, amount_clean, ready_at, collected)
+        VALUES (?, ?, ?, ?, 0)
+        ON DUPLICATE KEY UPDATE amount_dirty = ?, amount_clean = ?, ready_at = ?, collected = 0
+    ]], { citizenid, amount, cleanAmount, readyAt, amount, cleanAmount, readyAt })
+
+    return { ok = true, msg = Config.LaundryDialogue.submit, readyAt = readyAt, cleanAmount = cleanAmount }
+end)
+
+lib.callback.register('swisser_bank:collectLaundry', function(source)
+    if not Config.LaundryEnabled then return { ok = false, msg = 'Service unavailable.' } end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return { ok = false } end
+
+    local job = exports.oxmysql:single_async('SELECT * FROM swisser_bank_laundry WHERE citizenid = ? AND collected = 0', { citizenid })
+    if not job then
+        return { ok = false, msg = Config.LaundryDialogue.collected }
+    end
+
+    local now = os.time()
+    if job.ready_at > now then
+        local secsLeft = job.ready_at - now
+        return { ok = false, msg = Config.LaundryDialogue.not_ready:format(secsLeft) }
+    end
+
+    -- Pay out clean money
+    Bridge.AdjustMoney(source, 'bank', job.amount_clean, 'add', 'Laundered Funds')
+    exports.oxmysql:execute('UPDATE swisser_bank_laundry SET collected = 1 WHERE citizenid = ?', { citizenid })
+    CreateLog(citizenid, job.amount_clean, 'income', 'Deposit', 'personal') -- generic label on purpose
+
+    return { ok = true, msg = Config.LaundryDialogue.ready, amount = job.amount_clean }
+end)
+
+lib.callback.register('swisser_bank:checkLaundry', function(source)
+    if not Config.LaundryEnabled then return nil end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return nil end
+    local job = exports.oxmysql:single_async('SELECT * FROM swisser_bank_laundry WHERE citizenid = ? AND collected = 0', { citizenid })
+    if not job then return nil end
+    return { readyAt = job.ready_at, cleanAmount = job.amount_clean, amountDirty = job.amount_dirty }
 end)

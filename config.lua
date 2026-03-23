@@ -86,6 +86,56 @@ Config.CardTiers = {
 Config.ShowBankBlips = true
 Config.DefaultBlip = { sprite = 108, color = 2, scale = 0.7, label = "Bank" }
 
+-- [GANG ACCOUNT SETTINGS] ---------------------------------------------------------------
+Config.GangAccountEnabled = true
+-- Admin command to create an org account: /bankcreateorg [gangname]
+-- Only players with 'god' ace permission can use this
+Config.GangAccountCommand = 'bankcreateorg'
+
+-- Pre-approved gangs. Accounts are NOT auto-created — an admin still needs to run
+-- the command OR use the config to whitelist them (command checks this list first).
+-- Add your server's gangs here. label = display name shown in the UI.
+Config.AllowedGangAccounts = {
+    { gang = 'ballas',    label = 'Ballas Enterprise'   },
+    { gang = 'vagos',     label = 'Los Vagos Holdings'  },
+    { gang = 'families',  label = 'Families Capital'    },
+    { gang = 'marabunta', label = 'Marabunta Corp'      },
+    { gang = 'lost',      label = 'Lost MC Finances'    },
+}
+
+-- Role permissions matrix
+-- owner  → deposit, withdraw, transfer, add/remove members, change roles
+-- admin  → deposit, withdraw, transfer
+-- member → deposit only
+Config.OrgRoles = { 'owner', 'admin', 'member' }
+
+-- [MONEY LAUNDERING SETTINGS] ----------------------------------------------------------
+Config.LaundryEnabled  = true
+Config.LaundryFee      = 0.30   -- 30% cut kept by the NPC (player gets 70%)
+Config.LaundryTime     = 60     -- seconds until clean money is ready
+Config.LaundryMinAmount = 1000
+Config.LaundryMaxAmount = 50000 -- per transaction (break larger sums into batches)
+
+-- Location & model of the laundry NPC. Default: back alley near Vespucci canals.
+Config.LaundryNPC = {
+    coords = vector4(-1221.17, -908.53, 12.33, 350.0),
+    model  = `s_m_y_dealer_01`,
+    blip   = { enabled = true, sprite = 140, color = 1, scale = 0.7, label = "???" },
+}
+
+-- What the NPC says in different situations
+Config.LaundryDialogue = {
+    greeting    = "What do you want? Make it quick...",
+    submit      = "Leave it with me. Come back in about a minute and the money will be... cleaner.",
+    not_ready   = "Patience. I'm still working on it. Come back in %d seconds.",
+    ready       = "Here's your share. Clean as a whistle. Pleasure doing business.",
+    already_has = "I'm already handling something for you. Don't be greedy — wait until it's done.",
+    too_little  = "Don't waste my time with pocket change. Minimum is %s.",
+    too_much    = "I can only handle %s at a time. Break it up.",
+    no_dirty    = "I don't see anything to work with. Come back when you have the goods.",
+    collected   = "Nothing here for you right now.",
+}
+
 Config.BankLocations = {
     { coords = vector3(149.95, -1040.83, 29.37), label = "Bank" },
     { coords = vector3(-1212.98, -330.84, 37.78), label = "Bank" },

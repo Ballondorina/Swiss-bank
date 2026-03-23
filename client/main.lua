@@ -101,6 +101,105 @@ CreateThread(function()
     end
 end)
 
+-- ============================================================
+-- MONEY LAUNDERING NPC
+-- ============================================================
+local laundryPed = nil
+
+local function ShowLaundryDialogue(line)
+    lib.notify({ title = 'Shady Guy', description = line, type = 'inform', duration = 6000 })
+end
+
+local function HandleLaundryInteraction()
+    -- Check if there's already a pending job
+    local pending = lib.callback.await('swisser_bank:checkLaundry', false)
+
+    if pending then
+        local now = os.time()
+        if pending.readyAt > now then
+            local secsLeft = pending.readyAt - now
+            ShowLaundryDialogue(Config.LaundryDialogue.not_ready:format(secsLeft))
+        else
+            -- Ready to collect
+            ShowLaundryDialogue("Your money is ready. Let me get it...")
+            Wait(1500)
+            local result = lib.callback.await('swisser_bank:collectLaundry', false)
+            if result and result.ok then
+                ShowLaundryDialogue(result.msg)
+                TriggerEvent('swisser_bank:client:notify', 'success', '💵 Received ' .. result.amount .. ' ' .. Config.Currency .. ' (clean)')
+            else
+                ShowLaundryDialogue(result and result.msg or "Something went wrong.")
+            end
+        end
+        return
+    end
+
+    -- No pending job — ask for amount
+    ShowLaundryDialogue(Config.LaundryDialogue.greeting)
+    Wait(1000)
+
+    local input = lib.inputDialog('Money Laundering', {
+        { type = 'number', label = 'Amount of black money to launder', min = Config.LaundryMinAmount, max = Config.LaundryMaxAmount, required = true }
+    })
+    if not input or not input[1] then return end
+
+    local amount = math.floor(tonumber(input[1]) or 0)
+    local result = lib.callback.await('swisser_bank:submitLaundry', false, amount)
+    if result and result.ok then
+        ShowLaundryDialogue(result.msg)
+        local fee = amount - result.cleanAmount
+        lib.notify({
+            title = 'Deal Made',
+            description = string.format('Submitted: %d\nFee (%.0f%%): -%d\nYou will receive: %d',
+                amount, Config.LaundryFee * 100, fee, result.cleanAmount),
+            type = 'inform', duration = 8000
+        })
+    else
+        ShowLaundryDialogue(result and result.msg or "Not interested.")
+    end
+end
+
+CreateThread(function()
+    if not Config.LaundryEnabled then return end
+
+    -- Spawn NPC
+    local coords = Config.LaundryNPC.coords
+    RequestModel(Config.LaundryNPC.model)
+    while not HasModelLoaded(Config.LaundryNPC.model) do Wait(100) end
+
+    laundryPed = CreatePed(4, Config.LaundryNPC.model, coords.x, coords.y, coords.z - 1.0, coords.w, false, true)
+    SetEntityInvincible(laundryPed, true)
+    SetBlockingOfNonTemporaryEvents(laundryPed, true)
+    FreezeEntityPosition(laundryPed, true)
+    SetPedFleeAttributes(laundryPed, 0, false)
+    TaskStartScenarioInPlace(laundryPed, 'WORLD_HUMAN_STAND_IMPATIENT', 0, true)
+
+    -- Blip
+    if Config.LaundryNPC.blip and Config.LaundryNPC.blip.enabled then
+        local blip = AddBlipForCoord(coords.x, coords.y, coords.z)
+        SetBlipSprite(blip, Config.LaundryNPC.blip.sprite)
+        SetBlipScale(blip, Config.LaundryNPC.blip.scale)
+        SetBlipColour(blip, Config.LaundryNPC.blip.color)
+        SetBlipAsShortRange(blip, true)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString(Config.LaundryNPC.blip.label)
+        EndTextCommandSetBlipName(blip)
+    end
+
+    -- ox_target interaction
+    if Config.UseOxTarget then
+        exports.ox_target:addLocalEntity(laundryPed, {
+            {
+                name = 'swisser_laundry',
+                icon = 'fa-solid fa-money-bill-wave',
+                label = 'Talk to him...',
+                distance = 2.0,
+                onSelect = HandleLaundryInteraction,
+            }
+        })
+    end
+end)
+
 RegisterNUICallback('close', function(_, cb)
     isUIOpen = false
     SetNuiFocus(false, false)
@@ -177,6 +276,42 @@ end)
 RegisterNUICallback('markMailsRead', function(_, cb)
     TriggerServerEvent('swisser_bank:markMailsRead')
     cb('ok')
+end)
+
+-- Org NUI callbacks
+RegisterNUICallback('getOrgData', function(_, cb)
+    local result = lib.callback.await('swisser_bank:getOrgData', false)
+    cb(result)
+end)
+
+RegisterNUICallback('orgDeposit', function(data, cb)
+    local ok = lib.callback.await('swisser_bank:orgDeposit', false, data.amount)
+    cb(ok)
+end)
+
+RegisterNUICallback('orgWithdraw', function(data, cb)
+    local ok = lib.callback.await('swisser_bank:orgWithdraw', false, data.amount)
+    cb(ok)
+end)
+
+RegisterNUICallback('orgTransfer', function(data, cb)
+    local ok = lib.callback.await('swisser_bank:orgTransfer', false, data.iban, data.amount)
+    cb(ok)
+end)
+
+RegisterNUICallback('orgAddMember', function(data, cb)
+    local result = lib.callback.await('swisser_bank:orgAddMember', false, data.accountNo)
+    cb(result)
+end)
+
+RegisterNUICallback('orgRemoveMember', function(data, cb)
+    local ok = lib.callback.await('swisser_bank:orgRemoveMember', false, data.citizenid)
+    cb(ok)
+end)
+
+RegisterNUICallback('orgSetRole', function(data, cb)
+    local ok = lib.callback.await('swisser_bank:orgSetRole', false, data.citizenid, data.role)
+    cb(ok)
 end)
 
 -- Loan NUI callbacks

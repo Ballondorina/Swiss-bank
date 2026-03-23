@@ -84,4 +84,55 @@ function Bridge.GetPlayerByCID(citizenid)
     end
 end
 
+-- Returns gang/org name + whether the player is the boss
+function Bridge.GetGang(source)
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return nil, false end
+    if CurrentFramework == 'qb' then
+        local gang = Player.PlayerData.gang
+        if not gang or gang.name == 'none' then return nil, false end
+        return gang.name, gang.isboss == true
+    else
+        local job = Player.getJob()
+        -- In ESX servers that use jobs as gangs, grade 3+ is considered boss
+        return job and job.name or nil, job and job.grade_level >= 3 or false
+    end
+end
+
+-- Returns the player's current black money amount
+function Bridge.GetBlackMoney(source)
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return 0 end
+    if CurrentFramework == 'qb' then
+        return Player.PlayerData.money['black_money'] or 0
+    else
+        local acc = Player.getAccount('black_money')
+        return acc and acc.money or 0
+    end
+end
+
+-- Add or remove black money
+function Bridge.AdjustBlackMoney(source, amount, adjType)
+    local Player = Bridge.GetPlayer(source)
+    if not Player then return false end
+    if CurrentFramework == 'qb' then
+        if adjType == 'add' then
+            return Player.Functions.AddMoney('black_money', amount, 'Laundry')
+        else
+            return Player.Functions.RemoveMoney('black_money', amount, 'Laundry')
+        end
+    else
+        if adjType == 'add' then
+            Player.addAccountMoney('black_money', amount)
+            return true
+        else
+            if Player.getAccount('black_money').money >= amount then
+                Player.removeAccountMoney('black_money', amount)
+                return true
+            end
+            return false
+        end
+    end
+end
+
 -- Bridge is global, no return needed
