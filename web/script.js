@@ -386,9 +386,11 @@ async function handleIbanValidation(value) {
         currentIbanValid = true;
         const name = result.name?.trim();
         setIbanFeedback(name ? `Recipient: ${name}` : 'Account verified', 'success');
+        showRecipientPreview(name || 'Unknown', value);
     } else {
         currentIbanValid = false;
         setIbanFeedback('Account number not found', 'error');
+        hideRecipientPreview();
     }
     updateTransferButtonState();
 }
@@ -460,6 +462,7 @@ function setActivePage(pageId, labelEl) {
     if (labelEl) document.getElementById('page-title').innerText = labelEl.innerText;
     if (pageId === 'overview') setTimeout(initChart, 100);
     if (pageId === 'mailbox') markMailsAsRead();
+    if (pageId === 'loans') loadLoanData();
 }
 
 document.querySelectorAll('.sidebar-item').forEach(item => {
@@ -666,6 +669,8 @@ function updateUI(data) {
     renderTransactions(cachedTransactions);
     renderMails(cachedMails);
     updateGoalUI(data.goal, currentRawBalance);
+    updateStatPills(cachedTransactions);
+    renderQuickContacts(cachedTransactions);
 
     if (data.cardUrl && data.cardUrl !== "REMOVE") {
         document.getElementById('btn-remove-card').classList.remove('hidden');
@@ -999,6 +1004,221 @@ function keyPressed() {
     setTimeout(() => key.classList.remove('pressed'), 200);
 }
 
+// ===== TOAST =====
+function showToast(message, type = 'info', duration = 3500) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', info: 'fa-circle-info' };
+    const toast = document.createElement('div');
+    toast.className = `toast-item toast-${type}`;
+    toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.info} toast-icon"></i><span>${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('toast-out');
+        setTimeout(() => toast.remove(), 350);
+    }, duration);
+}
+
+// ===== STAT PILLS =====
+function updateStatPills(transactions) {
+    const now = Date.now();
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    let income = 0, outcome = 0;
+    (transactions || []).forEach(t => {
+        const ts = new Date(t.date).getTime();
+        if (ts >= thirtyDaysAgo) {
+            if (t.type === 'income') income += t.amount;
+            else outcome += t.amount;
+        }
+    });
+    const incomeEl = document.getElementById('stat-income-total');
+    const outcomeEl = document.getElementById('stat-outcome-total');
+    if (incomeEl) incomeEl.innerText = `${income.toLocaleString()} ${currencySymbol}`;
+    if (outcomeEl) outcomeEl.innerText = `${outcome.toLocaleString()} ${currencySymbol}`;
+}
+
+// ===== QUICK CONTACTS =====
+function renderQuickContacts(transactions) {
+    const chipsEl = document.getElementById('quick-contacts-chips');
+    const rowEl = document.getElementById('quick-contacts-row');
+    if (!chipsEl || !rowEl) return;
+    const seen = new Set();
+    const contacts = [];
+    (transactions || []).filter(t => t.type === 'outcome' && t.iban).forEach(t => {
+        if (!seen.has(t.iban) && contacts.length < 5) {
+            seen.add(t.iban);
+            contacts.push({ name: t.label, iban: t.iban });
+        }
+    });
+    if (!contacts.length) { rowEl.classList.add('hidden'); return; }
+    chipsEl.innerHTML = '';
+    contacts.forEach(c => {
+        const initials = (c.name || '?').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+        const chip = document.createElement('div');
+        chip.className = 'contact-chip';
+        chip.innerHTML = `<div class="contact-chip-avatar">${initials}</div><span>${c.name || c.iban}</span>`;
+        chip.addEventListener('click', () => {
+            const ibanInput = document.getElementById('inp-transfer-iban');
+            if (ibanInput) {
+                ibanInput.value = c.iban;
+                ibanInput.dispatchEvent(new Event('input'));
+            }
+            playSound(configAudio.Click, 0.15);
+        });
+        chipsEl.appendChild(chip);
+    });
+    rowEl.classList.remove('hidden');
+}
+
+// ===== RECIPIENT PREVIEW =====
+function showRecipientPreview(name, iban) {
+    const preview = document.getElementById('recipient-preview');
+    if (!preview) return;
+    const initials = (name || '?').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+    document.getElementById('recipient-initials').innerText = initials;
+    document.getElementById('recipient-name-display').innerText = name || 'Unknown';
+    document.getElementById('recipient-iban-display').innerText = iban || '';
+    preview.classList.remove('hidden');
+}
+function hideRecipientPreview() {
+    const preview = document.getElementById('recipient-preview');
+    if (preview) preview.classList.add('hidden');
+}
+
+// ===== LOAN PAGE =====
+let currentLoanData = null;
+let currentLoanRate = 10;
+
+function loadLoanData() {
+    fetch(`https://${GetParentResourceName()}/getLoanData`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    }).then(res => res.json()).then(data => renderLoanUI(data));
+}
+
+function renderLoanUI(data) {
+    if (!data) return;
+    currentLoanData = data;
+    currentLoanRate = data.interestRate || 10;
+
+    const activeLoanCard = document.getElementById('active-loan-card');
+    const noLoanCard = document.getElementById('no-loan-card');
+    const loanFormCard = document.getElementById('loan-form-card');
+    const loanBadge = document.getElementById('loan-badge');
+
+    document.getElementById('loan-summary-rate').innerText = currentLoanRate;
+
+    if (data.hasLoan && data.loan) {
+        const loan = data.loan;
+        const totalRepay = loan.amount + Math.round(loan.amount * (currentLoanRate / 100));
+        const repaid = totalRepay - loan.remaining;
+        const pct = Math.min(Math.max((repaid / totalRepay) * 100, 0), 100);
+
+        document.getElementById('loan-amount-display').innerText = `${(loan.remaining || loan.amount).toLocaleString()} ${currencySymbol}`;
+        document.getElementById('loan-due-display').innerText = loan.due_date ? new Date(loan.due_date).toLocaleDateString() : '—';
+        document.getElementById('loan-rate-text').innerText = `${currentLoanRate}% interest`;
+        document.getElementById('loan-progress-bar').style.width = `${100 - pct}%`;
+
+        activeLoanCard.classList.remove('hidden');
+        noLoanCard.classList.add('hidden');
+        loanFormCard.classList.add('hidden');
+        if (loanBadge) { loanBadge.innerText = '!'; loanBadge.classList.remove('hidden'); }
+    } else {
+        activeLoanCard.classList.add('hidden');
+        noLoanCard.classList.remove('hidden');
+        loanFormCard.classList.remove('hidden');
+        if (loanBadge) loanBadge.classList.add('hidden');
+
+        // Update preset labels from config
+        const maxLoan = data.maxLoanAmount || 200000;
+        const presets = [
+            Math.round(maxLoan * 0.05),
+            Math.round(maxLoan * 0.125),
+            Math.round(maxLoan * 0.25),
+            Math.round(maxLoan * 0.5)
+        ];
+        document.querySelectorAll('.loan-preset-btn').forEach((btn, i) => {
+            const amt = presets[i];
+            btn.dataset.amount = amt;
+            btn.innerText = amt >= 1000 ? `$${Math.round(amt / 1000)}K` : `$${amt}`;
+        });
+    }
+}
+
+function updateLoanSummary(amount) {
+    const summaryEl = document.getElementById('loan-summary');
+    if (!amount || amount <= 0) { summaryEl.classList.remove('visible'); return; }
+    const interest = Math.round(amount * (currentLoanRate / 100));
+    const total = amount + interest;
+    document.getElementById('loan-summary-principal').innerText = `${amount.toLocaleString()} ${currencySymbol}`;
+    document.getElementById('loan-summary-interest').innerText = `${interest.toLocaleString()} ${currencySymbol}`;
+    document.getElementById('loan-summary-total').innerText = `${total.toLocaleString()} ${currencySymbol}`;
+    summaryEl.classList.add('visible');
+}
+
+// Loan preset buttons
+document.querySelectorAll('.loan-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.loan-preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const amt = parseInt(btn.dataset.amount, 10);
+        const inp = document.getElementById('inp-loan-amount');
+        if (inp) { inp.value = amt.toLocaleString(); updateLoanSummary(amt); }
+        playSound(configAudio.Click, 0.15);
+    });
+});
+
+// Loan amount input live summary
+const loanAmountInput = document.getElementById('inp-loan-amount');
+if (loanAmountInput) {
+    ['inp-loan-amount'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('keydown', (e) => {
+                if ([46,8,9,27,13].includes(e.keyCode) ||
+                    (e.keyCode===65&&(e.ctrlKey||e.metaKey)) ||
+                    (e.keyCode>=35&&e.keyCode<=40)) return;
+                if ((e.shiftKey||(e.keyCode<48||e.keyCode>57))&&(e.keyCode<96||e.keyCode>105)) e.preventDefault();
+            });
+            el.addEventListener('input', () => {
+                formatNumberInput(el);
+                updateLoanSummary(getNumericValue(el));
+            });
+        }
+    });
+}
+
+// Take loan button
+const takeLoanBtn = document.getElementById('btn-take-loan');
+if (takeLoanBtn) {
+    takeLoanBtn.addEventListener('click', () => {
+        const amt = getNumericValue(document.getElementById('inp-loan-amount'));
+        if (!amt || amt <= 0) return;
+        fetch(`https://${GetParentResourceName()}/takeLoan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: amt })
+        }).then(res => res.json()).then(ok => {
+            if (ok) { loadLoanData(); refreshData(); playSound(configAudio.Success, 0.6); }
+        });
+    });
+}
+
+// Repay loan button
+const repayLoanBtn = document.getElementById('btn-repay-loan');
+if (repayLoanBtn) {
+    repayLoanBtn.addEventListener('click', () => {
+        fetch(`https://${GetParentResourceName()}/repayLoan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        }).then(res => res.json()).then(ok => {
+            if (ok) { loadLoanData(); refreshData(); playSound(configAudio.Success, 0.6); }
+        });
+    });
+}
+
 window.addEventListener('message', (event) => {
     const action = event.data.action;
     if (action === 'open_pin') {
@@ -1020,5 +1240,7 @@ window.addEventListener('message', (event) => {
         drawText(event.data.data);
     } else if (action === 'KEY_PRESSED') {
         keyPressed();
+    } else if (action === 'toast') {
+        showToast(event.data.message, event.data.toastType || 'info');
     }
 });
