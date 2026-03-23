@@ -23,6 +23,7 @@ client_scripts {
 
 server_scripts {
     'bridge/server.lua',
+    'server/integrations.lua',
     'server/main.lua'
 }
 

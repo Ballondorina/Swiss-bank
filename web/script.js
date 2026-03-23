@@ -463,6 +463,7 @@ function setActivePage(pageId, labelEl) {
     if (pageId === 'overview') setTimeout(initChart, 100);
     if (pageId === 'mailbox') markMailsAsRead();
     if (pageId === 'loans') loadLoanData();
+    if (pageId === 'org') loadOrgData();
 }
 
 document.querySelectorAll('.sidebar-item').forEach(item => {
@@ -599,43 +600,69 @@ function openBankDashboard(data, locale) {
 function applyLocale(loc) {
     if (!loc) return;
     const mappings = {
-        'lbl-overview': loc.overview,
-        'lbl-transactions': loc.transactions,
-        'lbl-transfer': loc.transfer,
-        'lbl-mailbox': loc.mailbox || "Mailbox",
-        'lbl-settings': loc.settings,
-        'lbl-exit': loc.exit,
-        'lbl-balance': loc.balance,
-        'btn-deposit': loc.deposit,
-        'btn-withdraw': loc.withdraw,
-        'btn-transfer': loc.send,
-        'bank-title': loc.welcome_short || "Swisser Bank",
-        'btn-change-pin': loc.change_pin_btn || "Update Code",
-        'btn-order-card': loc.order_card || "Order Card",
-        'btn-remove-card': loc.reset_default || "Reset Default",
-        'lbl-analysis-title': loc.analysis_title,
+        // Sidebar nav
+        'lbl-overview':      loc.overview,
+        'lbl-transactions':  loc.transactions,
+        'lbl-transfer':      loc.transfer,
+        'lbl-loans':         loc.loans || "Loans",
+        'lbl-org':           loc.org || "Organization",
+        'lbl-mailbox':       loc.mailbox || "Mailbox",
+        'lbl-settings':      loc.settings,
+        'lbl-exit':          loc.exit,
+        // Overview
+        'lbl-balance':          loc.balance,
+        'lbl-analysis-title':   loc.analysis_title,
         'lbl-savings-goal-title': loc.savings_goal,
-        'btn-goal-settings': loc.goal_settings,
-        'lbl-card-number': loc.card_number_label,
-        'lbl-quick-transfer': loc.quick_transfer,
-        'lbl-transfer-iban': loc.transfer_iban_label,
-        'lbl-transfer-amount': loc.transfer_amount_label,
-        'lbl-security-title': loc.settings_title,
+        'btn-goal-settings':    loc.goal_settings,
+        'lbl-card-number':      loc.card_number_label,
+        // Deposit / withdraw buttons
+        'btn-deposit':   loc.deposit,
+        'btn-withdraw':  loc.withdraw,
+        // Transfer page
+        'lbl-quick-transfer':   loc.quick_transfer,
+        'lbl-transfer-iban':    loc.transfer_iban_label,
+        'lbl-transfer-amount':  loc.transfer_amount_label,
+        'btn-transfer':         loc.send,
+        // Loans page
+        'lbl-take-loan':            loc.take_loan || "Request a Loan",
+        'btn-repay-loan':           loc.repay_loan || "Repay Loan",
+        'btn-take-loan':            loc.take_loan || "Request a Loan",
+        'no-loan-title':            loc.no_active_loan || "No Active Loan",
+        'no-loan-sub':              loc.no_active_loan_sub || "Borrow money instantly.",
+        'loan-frozen-banner__title': loc.loan_frozen_title || "Account Frozen",
+        'loan-frozen-banner__sub':  loc.loan_frozen_sub,
+        // Org page
+        'org-no-account-title':     loc.org_no_account || "No Organization Account",
+        // Settings
+        'lbl-security-title':   loc.settings_title,
         'lbl-card-design-title': loc.card_design,
-        'lbl-avatar-title': loc.avatar_design || "Profile Picture",
-        'btn-update-avatar': loc.update_avatar || "Update Avatar",
-        'btn-remove-avatar': loc.reset_default || "Reset Default",
+        'lbl-avatar-title':     loc.avatar_design || "Profile Picture",
+        'btn-change-pin':       loc.change_pin_btn || "Update Code",
+        'btn-order-card':       loc.order_card || "Order Card",
+        'btn-remove-card':      loc.reset_default || "Reset Default",
+        'btn-update-avatar':    loc.update_avatar || "Update Avatar",
+        'btn-remove-avatar':    loc.reset_default || "Reset Default",
+        // Goal modal
         'lbl-update-goal-title': loc.update_goal_title,
-        'lbl-goal-name': loc.goal_name_label,
-        'lbl-goal-target': loc.goal_target_label,
-        'btn-save-goal': loc.save_goal,
-        'btn-cancel-goal': loc.cancel
+        'lbl-goal-name':         loc.goal_name_label,
+        'lbl-goal-target':       loc.goal_target_label,
+        'btn-save-goal':         loc.save_goal,
+        'btn-cancel-goal':       loc.cancel,
     };
 
     for (const [id, text] of Object.entries(mappings)) {
         const el = document.getElementById(id);
         if (el && text) el.innerText = text;
     }
+
+    // Loans warning banner uses innerHTML so we can bold the first line
+    const warnEl = document.querySelector('.loan-warning-banner__text');
+    if (warnEl && loc.loan_warning) {
+        warnEl.innerHTML = `<strong>${loc.loan_warning}</strong><span>${loc.loan_warning_sub || ''}</span>`;
+    }
+    // Org no-account sub text
+    const orgSubEl = document.querySelector('#org-no-account .no-loan-sub');
+    if (orgSubEl && loc.org_no_account_sub) orgSubEl.innerText = loc.org_no_account_sub;
 }
 
 let lastGoalData = null;
@@ -1004,6 +1031,213 @@ function keyPressed() {
     setTimeout(() => key.classList.remove('pressed'), 200);
 }
 
+// ===== ORGANIZATION PAGE =====
+let currentOrgData = null;
+
+function loadOrgData() {
+    fetch(`https://${GetParentResourceName()}/getOrgData`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+    }).then(r => r.json()).then(data => renderOrgUI(data));
+}
+
+function renderOrgUI(data) {
+    const noAcc   = document.getElementById('org-no-account');
+    const main    = document.getElementById('org-main');
+    const sidebarItem = document.getElementById('sidebar-org');
+
+    if (!data) {
+        // Not in a gang or not a member — hide sidebar tab
+        if (sidebarItem) sidebarItem.classList.add('hidden');
+        return;
+    }
+
+    if (sidebarItem) sidebarItem.classList.remove('hidden');
+    currentOrgData = data;
+
+    if (data.noAccount) {
+        noAcc.classList.remove('hidden');
+        main.classList.add('hidden');
+        const title = document.getElementById('org-no-account-title');
+        if (title) title.innerText = `No account for "${data.gangName}"`;
+        return;
+    }
+
+    noAcc.classList.add('hidden');
+    main.classList.remove('hidden');
+
+    // Header
+    document.getElementById('org-name-display').innerText = data.label || data.orgId;
+    document.getElementById('org-account-no-display').innerText = data.accountNo || '—';
+    document.getElementById('org-balance-display').innerText = `${(data.balance || 0).toLocaleString()} ${currencySymbol}`;
+
+    const roleBadge = document.getElementById('org-role-badge');
+    if (roleBadge) {
+        roleBadge.innerText = (data.myRole || 'member').toUpperCase();
+        roleBadge.className = `org-role-badge org-role-${data.myRole || 'member'}`;
+    }
+
+    // Show/hide admin controls
+    const canManage = data.myRole === 'owner';
+    const canWithdraw = data.myRole === 'owner' || data.myRole === 'admin';
+    document.getElementById('org-withdraw-group')?.classList.toggle('hidden', !canWithdraw);
+    document.getElementById('org-transfer-group')?.classList.toggle('hidden', !canWithdraw);
+    document.getElementById('org-btn-add-member')?.classList.toggle('hidden', !canManage);
+
+    renderOrgMembers(data.members, data.myRole, data.orgId);
+    renderOrgTransactions(data.transactions);
+}
+
+function renderOrgMembers(members, myRole, orgId) {
+    const list = document.getElementById('org-member-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!members || !members.length) {
+        list.innerHTML = '<div class="no-loan-sub" style="padding:12px 0">No members yet.</div>';
+        return;
+    }
+    const roleIcons = { owner: '👑', admin: '⚙️', member: '👤' };
+    members.forEach(m => {
+        const name = [m.fname, m.lname].filter(Boolean).join(' ') || m.citizenid;
+        const isMe = m.citizenid === currentOrgData?.myRole; // rough check
+        const row = document.createElement('div');
+        row.className = 'org-member-row';
+        row.innerHTML = `
+            <div class="org-member-avatar">${(name[0] || '?').toUpperCase()}</div>
+            <div class="org-member-info">
+                <div class="org-member-name">${name}</div>
+                <div class="org-member-role-text">${roleIcons[m.role] || '👤'} ${(m.role || 'member').charAt(0).toUpperCase() + m.role.slice(1)}</div>
+            </div>
+            ${myRole === 'owner' && m.role !== 'owner' ? `
+            <div class="org-member-actions">
+                <button class="org-role-btn" data-cid="${m.citizenid}" data-role="${m.role === 'admin' ? 'member' : 'admin'}">
+                    ${m.role === 'admin' ? '↓ Demote' : '↑ Promote'}
+                </button>
+                <button class="org-remove-btn" data-cid="${m.citizenid}">✕</button>
+            </div>` : ''}
+        `;
+        list.appendChild(row);
+    });
+
+    // Promote/demote
+    list.querySelectorAll('.org-role-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cid = btn.dataset.cid, role = btn.dataset.role;
+            fetch(`https://${GetParentResourceName()}/orgSetRole`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ citizenid: cid, role })
+            }).then(r => r.json()).then(ok => { if (ok) loadOrgData(); });
+        });
+    });
+
+    // Remove
+    list.querySelectorAll('.org-remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            fetch(`https://${GetParentResourceName()}/orgRemoveMember`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ citizenid: btn.dataset.cid })
+            }).then(r => r.json()).then(ok => { if (ok) loadOrgData(); });
+        });
+    });
+}
+
+function renderOrgTransactions(txs) {
+    const list = document.getElementById('org-tx-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!txs || !txs.length) {
+        list.innerHTML = '<div class="no-loan-sub" style="padding:12px 0">No activity yet.</div>';
+        return;
+    }
+    txs.forEach(t => {
+        const isIn = t.type === 'income';
+        const row = document.createElement('div');
+        row.className = 'transaction-row';
+        row.innerHTML = `
+            <div class="transaction-details">
+                <div class="transaction-icon ${isIn ? 'income' : 'outcome'}">
+                    <i class="fa-solid ${isIn ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
+                </div>
+                <div class="transaction-meta">
+                    <div style="font-weight:700;font-size:15px">${t.label}</div>
+                    <div style="font-size:12px;opacity:.45">${t.player_name} &bull; ${new Date(t.date).toLocaleString()}</div>
+                </div>
+            </div>
+            <div class="${isIn ? 'text-income' : 'text-outcome'}">
+                ${isIn ? '+' : '-'}${t.amount.toLocaleString()} ${currencySymbol}
+            </div>`;
+        list.appendChild(row);
+    });
+}
+
+// Org deposit
+document.getElementById('org-btn-deposit')?.addEventListener('click', () => {
+    const inp = document.getElementById('org-inp-deposit');
+    const amt = getNumericValue(inp);
+    if (!amt || amt <= 0) return;
+    fetch(`https://${GetParentResourceName()}/orgDeposit`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt })
+    }).then(r => r.json()).then(ok => { if (ok) { inp.value = ''; loadOrgData(); playSound(configAudio.Success, 0.5); } });
+});
+
+// Org withdraw
+document.getElementById('org-btn-withdraw')?.addEventListener('click', () => {
+    const inp = document.getElementById('org-inp-withdraw');
+    const amt = getNumericValue(inp);
+    if (!amt || amt <= 0) return;
+    fetch(`https://${GetParentResourceName()}/orgWithdraw`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt })
+    }).then(r => r.json()).then(ok => { if (ok) { inp.value = ''; loadOrgData(); playSound(configAudio.Success, 0.5); } });
+});
+
+// Org transfer
+document.getElementById('org-btn-transfer')?.addEventListener('click', () => {
+    const ibanInp = document.getElementById('org-inp-transfer-iban');
+    const amtInp  = document.getElementById('org-inp-transfer-amount');
+    const iban = ibanInp?.value.trim();
+    const amt  = getNumericValue(amtInp);
+    if (!iban || !amt || amt <= 0) return;
+    fetch(`https://${GetParentResourceName()}/orgTransfer`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iban, amount: amt })
+    }).then(r => r.json()).then(ok => {
+        if (ok) { ibanInp.value = ''; amtInp.value = ''; loadOrgData(); playSound(configAudio.Success, 0.5); }
+    });
+});
+
+// Add member toggle
+document.getElementById('org-btn-add-member')?.addEventListener('click', () => {
+    const form = document.getElementById('org-add-member-form');
+    form?.classList.toggle('hidden');
+});
+
+document.getElementById('org-btn-confirm-add')?.addEventListener('click', () => {
+    const inp = document.getElementById('org-inp-add-acc');
+    const accNo = inp?.value.trim();
+    if (!accNo) return;
+    fetch(`https://${GetParentResourceName()}/orgAddMember`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accountNo: accNo })
+    }).then(r => r.json()).then(res => {
+        if (res?.ok) {
+            inp.value = '';
+            document.getElementById('org-add-member-form')?.classList.add('hidden');
+            showToast(`${res.name} added as member`, 'success');
+            loadOrgData();
+        } else {
+            showToast(res?.reason || 'Could not add member.', 'error');
+        }
+    });
+});
+
+// Number formatting for org inputs
+['org-inp-deposit','org-inp-withdraw','org-inp-transfer-amount'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('keydown', e => {
+        if ([46,8,9,27,13].includes(e.keyCode)||(e.keyCode>=35&&e.keyCode<=40)) return;
+        if ((e.shiftKey||(e.keyCode<48||e.keyCode>57))&&(e.keyCode<96||e.keyCode>105)) e.preventDefault();
+    });
+    el.addEventListener('input', () => formatNumberInput(el));
+});
+
 // ===== TOAST =====
 function showToast(message, type = 'info', duration = 3500) {
     const container = document.getElementById('toast-container');
@@ -1106,19 +1340,32 @@ function renderLoanUI(data) {
     const noLoanCard = document.getElementById('no-loan-card');
     const loanFormCard = document.getElementById('loan-form-card');
     const loanBadge = document.getElementById('loan-badge');
+    const frozenBanner = document.getElementById('loan-frozen-banner');
 
     document.getElementById('loan-summary-rate').innerText = currentLoanRate;
 
+    // Frozen banner
+    if (frozenBanner) {
+        if (data.accountLocked) frozenBanner.classList.remove('hidden');
+        else frozenBanner.classList.add('hidden');
+    }
+
     if (data.hasLoan && data.loan) {
         const loan = data.loan;
-        const totalRepay = loan.amount + Math.round(loan.amount * (currentLoanRate / 100));
-        const repaid = totalRepay - loan.remaining;
-        const pct = Math.min(Math.max((repaid / totalRepay) * 100, 0), 100);
+        const pct = 0; // server tracks full remaining; no partial yet
 
         document.getElementById('loan-amount-display').innerText = `${(loan.remaining || loan.amount).toLocaleString()} ${currencySymbol}`;
         document.getElementById('loan-due-display').innerText = loan.due_date ? new Date(loan.due_date).toLocaleDateString() : '—';
-        document.getElementById('loan-rate-text').innerText = `${currentLoanRate}% interest`;
-        document.getElementById('loan-progress-bar').style.width = `${100 - pct}%`;
+        document.getElementById('loan-rate-text').innerText = `${currentLoanRate}% interest${data.penaltyApplied ? ' +15% penalty' : ''}`;
+        document.getElementById('loan-progress-bar').style.width = `100%`;
+
+        // Red bar when overdue
+        const bar = document.getElementById('loan-progress-bar');
+        if (data.daysOverdue > 0) {
+            bar.style.background = 'linear-gradient(90deg, #ef4444, #f59e0b)';
+        } else {
+            bar.style.background = '';
+        }
 
         activeLoanCard.classList.remove('hidden');
         noLoanCard.classList.add('hidden');
@@ -1219,6 +1466,177 @@ if (repayLoanBtn) {
     });
 }
 
+// ===== ADMIN DASHBOARD =====
+let adminPlayerList = [];
+let currentInspectCid = null;
+
+function openAdminDashboard(data) {
+    if (!data) return;
+    adminPlayerList = data.players || [];
+    const adminUI = document.getElementById('admin-ui');
+    if (!adminUI) return;
+    adminUI.style.display = 'flex';
+    shield.style.display = 'block';
+    setTimeout(() => adminUI.classList.add('show'), 20);
+    renderAdminPlayers();
+}
+
+function closeAdminUI() {
+    const adminUI = document.getElementById('admin-ui');
+    if (!adminUI) return;
+    adminUI.classList.remove('show');
+    setTimeout(() => {
+        adminUI.style.display = 'none';
+        shield.style.display = 'none';
+    }, 300);
+    fetch(`https://${GetParentResourceName()}/close`, { method: 'POST' });
+}
+
+function renderAdminPlayers() {
+    const list = document.getElementById('admin-player-list');
+    const countEl = document.getElementById('admin-player-count');
+    if (!list) return;
+    if (countEl) countEl.innerText = adminPlayerList.length;
+    list.innerHTML = '';
+    if (!adminPlayerList.length) {
+        list.innerHTML = '<div class="admin-no-players"><i class="fa-solid fa-users-slash"></i><br>No players online</div>';
+        return;
+    }
+    adminPlayerList.forEach(p => {
+        const initials = (p.name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+        const row = document.createElement('div');
+        row.className = 'admin-player-row';
+        row.innerHTML = `
+            <div class="admin-player-avatar">${initials}</div>
+            <div class="admin-player-info">
+                <div class="admin-player-name">${p.name}<span class="admin-player-id">[${p.source}]</span></div>
+                <div class="admin-player-cid">${p.citizenid}</div>
+            </div>
+            <button class="admin-inspect-btn" data-cid="${p.citizenid}">
+                <i class="fa-solid fa-magnifying-glass"></i> Inspect
+            </button>`;
+        list.appendChild(row);
+    });
+
+    list.querySelectorAll('.admin-inspect-btn').forEach(btn => {
+        btn.addEventListener('click', () => openAdminInspect(btn.dataset.cid));
+    });
+}
+
+async function openAdminInspect(citizenid) {
+    currentInspectCid = citizenid;
+    const modal = document.getElementById('admin-inspect-modal');
+    const body  = document.getElementById('admin-inspect-body');
+    const actions = document.getElementById('admin-inspect-actions');
+    if (!modal) return;
+
+    body.innerHTML = '<div style="text-align:center;opacity:.5;padding:20px">Loading...</div>';
+    actions.innerHTML = '';
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+
+    const info = await fetch(`https://${GetParentResourceName()}/adminInspect`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ citizenid })
+    }).then(r => r.json());
+
+    if (!info) {
+        body.innerHTML = '<div style="text-align:center;color:#ef4444;padding:20px">Access denied or player not found.</div>';
+        return;
+    }
+
+    const isFrozen = info.loan?.locked;
+    const hasLoan  = !!info.loan && info.loan.amount > 0;
+
+    body.innerHTML = `
+        <div class="admin-info-row"><span class="admin-info-label">Citizen ID</span><span class="admin-info-value" style="font-family:monospace">${info.citizenid}</span></div>
+        <div class="admin-info-row"><span class="admin-info-label">Account No.</span><span class="admin-info-value">${info.accNo || '—'}</span></div>
+        <div class="admin-info-row"><span class="admin-info-label">Bank Balance</span><span class="admin-info-value">${(info.balance || 0).toLocaleString()} ${currencySymbol}</span></div>
+        <div class="admin-info-row">
+            <span class="admin-info-label">Account Status</span>
+            <span class="admin-info-value ${isFrozen ? 'frozen' : 'ok'}">${isFrozen ? '🔒 FROZEN' : '✅ Active'}</span>
+        </div>
+        <div class="admin-info-row">
+            <span class="admin-info-label">Active Loan</span>
+            <span class="admin-info-value ${hasLoan ? 'frozen' : 'ok'}">${hasLoan ? (info.loan.amount || 0).toLocaleString() + ' ' + currencySymbol : 'None'}</span>
+        </div>`;
+
+    actions.innerHTML = `
+        <button class="admin-action-btn ${isFrozen ? 'admin-action-btn--unfreeze' : 'admin-action-btn--freeze'}" id="admin-btn-freeze">
+            <i class="fa-solid ${isFrozen ? 'fa-lock-open' : 'fa-lock'}"></i>
+            ${isFrozen ? 'Unfreeze' : 'Freeze'} Account
+        </button>
+        <button class="admin-action-btn admin-action-btn--pin" id="admin-btn-pin">
+            <i class="fa-solid fa-key"></i> Reset PIN
+        </button>
+        ${hasLoan ? `<button class="admin-action-btn admin-action-btn--loan" id="admin-btn-loan" style="grid-column:1/-1">
+            <i class="fa-solid fa-trash-can"></i> Force Clear Loan
+        </button>` : ''}`;
+
+    document.getElementById('admin-btn-freeze')?.addEventListener('click', async () => {
+        const res = await fetch(`https://${GetParentResourceName()}/adminToggleFreeze`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ citizenid })
+        }).then(r => r.json());
+        if (res) {
+            showToast(`Account ${res.frozen ? 'frozen' : 'unfrozen'}`, res.frozen ? 'error' : 'success');
+            openAdminInspect(citizenid); // refresh
+        }
+    });
+
+    document.getElementById('admin-btn-pin')?.addEventListener('click', async () => {
+        const ok = await fetch(`https://${GetParentResourceName()}/adminResetPIN`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ citizenid })
+        }).then(r => r.json());
+        showToast(ok ? 'PIN reset to default' : 'Failed to reset PIN', ok ? 'success' : 'error');
+    });
+
+    document.getElementById('admin-btn-loan')?.addEventListener('click', async () => {
+        const ok = await fetch(`https://${GetParentResourceName()}/adminClearLoan`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ citizenid })
+        }).then(r => r.json());
+        if (ok) {
+            showToast('Loan cleared', 'success');
+            openAdminInspect(citizenid);
+        } else {
+            showToast('Failed to clear loan', 'error');
+        }
+    });
+}
+
+// Broadcast
+document.getElementById('admin-broadcast-send')?.addEventListener('click', async () => {
+    const input = document.getElementById('admin-broadcast-input');
+    const message = input?.value.trim();
+    if (!message) return;
+    const btn = document.getElementById('admin-broadcast-send');
+    btn.disabled = true;
+    const ok = await fetch(`https://${GetParentResourceName()}/adminBroadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+    }).then(r => r.json());
+    btn.disabled = false;
+    if (ok) {
+        showToast(`Broadcast sent to ${adminPlayerList.length} player(s)`, 'success');
+        input.value = '';
+    } else {
+        showToast('Failed to send broadcast', 'error');
+    }
+});
+
+document.getElementById('admin-broadcast-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('admin-broadcast-send')?.click();
+});
+
+document.getElementById('admin-close-btn')?.addEventListener('click', closeAdminUI);
+document.getElementById('admin-modal-close')?.addEventListener('click', () => {
+    const modal = document.getElementById('admin-inspect-modal');
+    if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
+});
+
 window.addEventListener('message', (event) => {
     const action = event.data.action;
     if (action === 'open_pin') {
@@ -1229,6 +1647,9 @@ window.addEventListener('message', (event) => {
         showAtmQuip();
         document.body.style.background = "transparent";
         setTimeout(() => atmUI.classList.add('show'), 50);
+    } else if (action === 'open_admin') {
+        if (event.data.audio) configAudio = event.data.audio;
+        openAdminDashboard(event.data.data);
     } else if (action === 'open_bank') {
         if (event.data.audio) configAudio = event.data.audio;
         openBankDashboard(event.data.data, event.data.locale);

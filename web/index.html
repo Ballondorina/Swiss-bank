@@ -71,8 +71,12 @@
                             <i class="fa-solid fa-paper-plane"></i><span id="lbl-transfer">Transfer</span>
                         </div>
                         <div class="sidebar-item" data-page="loans">
-                            <i class="fa-solid fa-hand-holding-dollar"></i><span id="lbl-loans">Loans</span>
+                            <i class="fa-solid fa-hand-holding-dollar"></i><span id="lbl-loans" data-loc="loans">Loans</span>
                             <span id="loan-badge" class="sidebar-badge loan-badge hidden">!</span>
+                        </div>
+                        <div class="sidebar-item hidden" id="sidebar-org" data-page="org">
+                            <i class="fa-solid fa-shield-halved"></i><span id="lbl-org">Organization</span>
+                            <span id="org-badge" class="sidebar-badge org-badge hidden">!</span>
                         </div>
                         <div class="sidebar-item" data-page="mailbox">
                             <i class="fa-solid fa-envelope"></i><span id="lbl-mailbox">Mailbox</span>
@@ -303,6 +307,24 @@
                     <div id="page-loans" class="page-content hidden">
                         <div class="loans-layout">
 
+                            <!-- Account frozen banner -->
+                            <div id="loan-frozen-banner" class="loan-frozen-banner hidden">
+                                <i class="fa-solid fa-lock loan-frozen-banner__icon"></i>
+                                <div>
+                                    <div class="loan-frozen-banner__title" id="loan-frozen-banner__title">🔒 Account Frozen</div>
+                                    <div class="loan-frozen-banner__sub" id="loan-frozen-banner__sub">Withdrawals and transfers are blocked. Repay your loan to unlock.</div>
+                                </div>
+                            </div>
+
+                            <!-- Warning banner (always visible) -->
+                            <div class="loan-warning-banner">
+                                <span class="loan-warning-banner__emoji">⚠️</span>
+                                <div class="loan-warning-banner__text">
+                                    <strong>Att Låna pengar är inte gratis!</strong>
+                                    <span>Late payments result in daily warnings, a 15% penalty on day 4, and full account freeze on day 7.</span>
+                                </div>
+                            </div>
+
                             <!-- Active loan card (shown when loan exists) -->
                             <div id="active-loan-card" class="loan-status-card hidden">
                                 <div class="loan-status-card__header">
@@ -331,13 +353,13 @@
                             <!-- No active loan placeholder -->
                             <div id="no-loan-card" class="no-loan-card">
                                 <div class="no-loan-icon"><i class="fa-solid fa-hand-holding-dollar"></i></div>
-                                <div class="no-loan-title">No Active Loan</div>
-                                <div class="no-loan-sub">Borrow money instantly and repay with interest.</div>
+                                <div class="no-loan-title" id="no-loan-title">No Active Loan</div>
+                                <div class="no-loan-sub" id="no-loan-sub">Borrow money instantly and repay with interest.</div>
                             </div>
 
                             <!-- Loan request form -->
                             <div class="loan-form-card" id="loan-form-card">
-                                <h4 class="loan-form-title" id="lbl-take-loan">Request a Loan</h4>
+                                <h4 class="loan-form-title" id="lbl-take-loan" data-loc="take_loan">Request a Loan</h4>
                                 <div class="loan-presets" id="loan-presets">
                                     <button class="loan-preset-btn" data-amount="10000">$10K</button>
                                     <button class="loan-preset-btn" data-amount="25000">$25K</button>
@@ -366,6 +388,83 @@
                                     <i class="fa-solid fa-hand-holding-dollar"></i> Request Loan
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== ORGANIZATION PAGE ===== -->
+                    <div id="page-org" class="page-content hidden">
+
+                        <!-- No account placeholder -->
+                        <div id="org-no-account" class="no-loan-card hidden">
+                            <div class="no-loan-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                            <div class="no-loan-title" id="org-no-account-title">No Organization Account</div>
+                            <div class="no-loan-sub">Your organization does not have a bank account yet. Contact an admin.</div>
+                        </div>
+
+                        <!-- Org header card -->
+                        <div id="org-main" class="hidden">
+                            <div class="org-header-card">
+                                <div class="org-header-left">
+                                    <div class="org-header-label">ORGANIZATION</div>
+                                    <div class="org-name" id="org-name-display">—</div>
+                                    <div class="org-account-no"><i class="fa-solid fa-hashtag"></i> <span id="org-account-no-display">—</span></div>
+                                </div>
+                                <div class="org-header-right">
+                                    <div class="org-header-label">BALANCE</div>
+                                    <div class="org-balance" id="org-balance-display">0 $</div>
+                                    <div class="org-role-badge" id="org-role-badge">member</div>
+                                </div>
+                            </div>
+
+                            <!-- Actions row -->
+                            <div class="org-actions-row">
+                                <div class="action-group">
+                                    <div class="action-group-label">DEPOSIT (cash)</div>
+                                    <input type="text" class="form-control" id="org-inp-deposit" placeholder="Amount" inputmode="numeric" pattern="[0-9,]*">
+                                    <button class="btn-action btn-deposit-action btn-full" id="org-btn-deposit">
+                                        <i class="fa-solid fa-plus"></i> Deposit
+                                    </button>
+                                </div>
+                                <div class="action-group" id="org-withdraw-group">
+                                    <div class="action-group-label">WITHDRAW (cash)</div>
+                                    <input type="text" class="form-control" id="org-inp-withdraw" placeholder="Amount" inputmode="numeric" pattern="[0-9,]*">
+                                    <button class="btn-action btn-withdraw-action btn-full" id="org-btn-withdraw">
+                                        <i class="fa-solid fa-minus"></i> Withdraw
+                                    </button>
+                                </div>
+                                <div class="action-group" id="org-transfer-group">
+                                    <div class="action-group-label">TRANSFER OUT</div>
+                                    <input type="text" class="form-control" id="org-inp-transfer-iban" placeholder="Account No.">
+                                    <input type="text" class="form-control" id="org-inp-transfer-amount" placeholder="Amount" inputmode="numeric" pattern="[0-9,]*">
+                                    <button class="btn-action btn-blue btn-full" id="org-btn-transfer">
+                                        <i class="fa-solid fa-paper-plane"></i> Transfer
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Members -->
+                            <div class="section-header" style="margin-top:22px;">
+                                <h4 class="section-title"><i class="fa-solid fa-users"></i> Members</h4>
+                                <button class="icon-btn" id="org-btn-add-member" title="Add member by account number">
+                                    <i class="fa-solid fa-user-plus"></i>
+                                </button>
+                            </div>
+
+                            <!-- Add member form (hidden by default) -->
+                            <div id="org-add-member-form" class="org-add-member-form hidden">
+                                <input type="text" class="form-control" id="org-inp-add-acc" placeholder="Member's Account Number">
+                                <button class="btn-action btn-deposit-action" id="org-btn-confirm-add">
+                                    <i class="fa-solid fa-check"></i> Add
+                                </button>
+                            </div>
+
+                            <div id="org-member-list" class="org-member-list"></div>
+
+                            <!-- Activity log -->
+                            <div class="section-header" style="margin-top:22px;">
+                                <h4 class="section-title"><i class="fa-solid fa-clock-rotate-left"></i> Activity Log</h4>
+                            </div>
+                            <div id="org-tx-list" class="transaction-scroll-area"></div>
                         </div>
                     </div>
 
@@ -427,6 +526,60 @@
                 <div class="modal-actions">
                     <button class="btn btn-blue flex-1" id="btn-save-goal" onclick="saveGoal()">Save Goal</button>
                     <button class="btn btn-ghost" id="btn-cancel-goal" onclick="toggleGoalEdit()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== ADMIN DASHBOARD ===== -->
+        <div id="admin-ui" style="display:none;" class="admin-ui-container animate__animated">
+            <div class="admin-panel">
+                <div class="admin-header">
+                    <div class="admin-header-left">
+                        <i class="fa-solid fa-shield-halved admin-header-icon"></i>
+                        <div>
+                            <div class="admin-header-title">Admin Dashboard</div>
+                            <div class="admin-header-sub">Swiss Bank Staff Panel</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-ghost" id="admin-close-btn">
+                        <i class="fa-solid fa-power-off"></i> Close
+                    </button>
+                </div>
+
+                <!-- Broadcast section -->
+                <div class="admin-broadcast-card">
+                    <div class="admin-broadcast-label">
+                        <i class="fa-solid fa-bullhorn"></i> Bank-wide Announcement
+                    </div>
+                    <div class="admin-broadcast-row">
+                        <input type="text" id="admin-broadcast-input" class="form-control"
+                            placeholder="e.g. Bank transfers will be disabled while we fix our servers!"
+                            maxlength="200">
+                        <button class="admin-broadcast-btn" id="admin-broadcast-send">
+                            <i class="fa-solid fa-paper-plane"></i> Send to All
+                        </button>
+                    </div>
+                </div>
+
+                <div class="admin-section-label">Online Players (<span id="admin-player-count">0</span>)</div>
+                <div class="admin-player-grid" id="admin-player-list">
+                    <!-- populated by JS -->
+                </div>
+            </div>
+
+            <!-- Inspect modal -->
+            <div id="admin-inspect-modal" class="modal-overlay hidden">
+                <div class="modal-content animate__animated animate__zoomIn" style="max-width:440px;">
+                    <h3 class="modal-title"><i class="fa-solid fa-user-shield"></i> Player Details</h3>
+                    <div id="admin-inspect-body" class="admin-inspect-body">
+                        <!-- populated by JS -->
+                    </div>
+                    <div class="admin-inspect-actions" id="admin-inspect-actions">
+                        <!-- populated by JS -->
+                    </div>
+                    <div class="modal-actions" style="margin-top:16px;">
+                        <button class="btn btn-ghost" id="admin-modal-close">Close</button>
+                    </div>
                 </div>
             </div>
         </div>

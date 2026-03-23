@@ -1,25 +1,42 @@
 Locales = Locales or {}
 
 Locales['en'] = {
+    -- Sidebar / navigation
     open_bank = "Access Bank",
     open_atm = "Insert Card",
     welcome = "Welcome to Swisser Bank",
     overview = "Overview",
     transactions = "Transactions",
     transfer = "Transfer",
+    loans = "Loans",
+    org = "Organization",
+    mailbox = "Mailbox",
     settings = "Settings",
-    exit = "Exit",
+    exit = "Logout",
+
+    -- Overview
     balance = "Total Balance",
-    income = "Income",
-    outcome = "Outcome",
+    income = "Income (30d)",
+    outcome = "Spent (30d)",
     my_account = "My Account",
     deposit = "Deposit",
     withdraw = "Withdraw",
+    analysis_title = "Financial Analysis",
+    savings_goal = "Savings Goal",
+    goal_settings = "Settings",
+    card_number_label = "Account Number",
+
+    -- Transfer
     fast_transfer = "Fast Transfer",
+    quick_transfer = "Quick Transfer",
     iban = "IBAN / Account Number",
+    transfer_iban_label = "Recipient IBAN / Account Number",
     amount = "Amount",
+    transfer_amount_label = "Amount to send",
     send = "Send Funds",
     recent_activity = "Recent Activity",
+
+    -- Notifications
     success = "Success",
     error = "Error",
     transfer_sent = "You sent %s to %s",
@@ -29,10 +46,12 @@ Locales['en'] = {
     account_not_found = "Account not found",
     withdrawn = "You withdrew %s",
     deposited = "You deposited %s",
+
+    -- PIN / ATM
     enter_pin = "Enter PIN Code",
     wrong_pin = "Incorrect PIN Code",
-    
-    -- Settings Page
+
+    -- Settings
     settings_title = "Security Settings",
     current_pin = "Current PIN",
     new_pin = "New PIN (4 Digits)",
@@ -46,15 +65,11 @@ Locales['en'] = {
     order_card = "Order New Design",
     reset_default = "Reset Default",
     card_cost_warning = "Cost: %s",
+    avatar_design = "Profile Picture",
+    update_avatar = "Update Avatar",
+    avatar_cost_warning = "Cost: %s",
 
-    -- New Missing Translations
-    analysis_title = "Financial Analysis",
-    savings_goal = "Savings Goal",
-    goal_settings = "Settings",
-    card_number_label = "Account Number",
-    quick_transfer = "Quick Transfer",
-    transfer_iban_label = "Recipient IBAN / Account Number",
-    transfer_amount_label = "Amount to send",
+    -- Savings goal modal
     update_goal_title = "Update Savings Goal",
     goal_name_label = "Goal Name (e.g. New Car)",
     goal_target_label = "Target Amount",
@@ -62,7 +77,7 @@ Locales['en'] = {
     cancel = "Cancel",
 
     -- Loans
-    loans = "Loans",
+    loans_title = "Loans",
     take_loan = "Request a Loan",
     repay_loan = "Repay Loan",
     loan_amount = "Loan Amount",
@@ -70,11 +85,54 @@ Locales['en'] = {
     loan_total = "Total to Repay",
     loan_due = "Due Date",
     no_active_loan = "No Active Loan",
+    no_active_loan_sub = "Borrow money instantly and repay with interest.",
+    loan_outstanding = "Outstanding Balance",
     loan_taken = "Loan of %s approved and deposited",
     loan_repaid = "Loan of %s repaid successfully",
     loan_insufficient = "Insufficient funds to repay loan",
     loan_already_active = "You already have an active loan",
     loan_max_exceeded = "Amount exceeds maximum loan limit",
     loan_min_required = "Minimum loan amount is %s",
-    loan_disabled = "Loans are currently disabled"
+    loan_disabled = "Loans are currently disabled",
+    loan_frozen_title = "Account Frozen",
+    loan_frozen_sub = "Withdrawals and transfers are blocked. Repay your loan to unlock.",
+    loan_warning = "Att Låna pengar är inte gratis!",
+    loan_warning_sub = "Late payments result in daily warnings, a 15% penalty on day 4, and full account freeze on day 7.",
+
+    -- Organization / gang account
+    org_title = "Organization",
+    org_balance = "Balance",
+    org_no_account = "No Organization Account",
+    org_no_account_sub = "Your organization does not have a bank account yet. Contact an admin.",
+    org_deposit = "Deposit (cash)",
+    org_withdraw = "Withdraw (cash)",
+    org_transfer = "Transfer Out",
+    org_members = "Members",
+    org_add_member = "Add member by account number",
+    org_activity = "Activity Log",
+    org_no_members = "No members yet.",
+    org_no_activity = "No activity yet.",
+
+    -- Server-side notifications (transfers, deposits, withdrawals)
+    notify_sent           = "✅ Sent %s %s to %s (%s)",
+    notify_received       = "💸 You received %s %s from %s (%s)",
+    notify_deposited      = "✅ Deposited %s %s",
+    notify_withdrawn      = "✅ Withdrew %s %s",
+    notify_no_cash        = "❌ Insufficient cash for deposit",
+    notify_no_funds       = "❌ Insufficient funds for withdrawal",
+    notify_frozen         = "🔒 Account frozen — repay your loan to unlock",
+    mail_transfer_subject = "💸 Incoming Transfer",
+    mail_transfer_body    = "%s (%s) sent you %s %s.",
+    mail_transfer_offline = "%s (%s) sent you %s %s while you were away.",
+
+    -- Money laundering NPC
+    laundry_talk = "Talk to him...",
+    laundry_greeting = "What do you want? Make it quick...",
+    laundry_submit = "Leave it with me. Come back in about a minute and the money will be... cleaner.",
+    laundry_not_ready = "Patience. I'm still working on it. Come back in %d seconds.",
+    laundry_ready = "Here's your share. Clean as a whistle.",
+    laundry_too_little = "That's not worth my time. Bring more.",
+    laundry_too_much = "That's way too much. I can't move that kind of money.",
+    laundry_no_black = "I don't see any dirty money on you.",
+    laundry_already_pending = "You already have a job running. Come back later.",
 }

@@ -66,5 +66,60 @@ CREATE TABLE IF NOT EXISTS `swisser_bank_loans` (
   `interest_rate` float NOT NULL DEFAULT 0.10,
   `due_date` datetime NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `overdue_notified` int(11) NOT NULL DEFAULT 0,   -- highest warning day already sent (1-3)
+  `penalty_applied` tinyint(1) NOT NULL DEFAULT 0, -- 1 = 15% penalty already added on day 4
+  `account_locked` tinyint(1) NOT NULL DEFAULT 0,  -- 1 = withdrawals/transfers blocked
+  PRIMARY KEY (`citizenid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Migration: add new columns if upgrading from an older version
+ALTER TABLE `swisser_bank_loans` ADD COLUMN IF NOT EXISTS `overdue_notified` int(11) NOT NULL DEFAULT 0;
+ALTER TABLE `swisser_bank_loans` ADD COLUMN IF NOT EXISTS `penalty_applied` tinyint(1) NOT NULL DEFAULT 0;
+ALTER TABLE `swisser_bank_loans` ADD COLUMN IF NOT EXISTS `account_locked` tinyint(1) NOT NULL DEFAULT 0;
+
+-- 9. Organization (gang) shared accounts
+CREATE TABLE IF NOT EXISTS `swisser_bank_org_accounts` (
+  `org_id`     varchar(50)  NOT NULL,
+  `label`      varchar(100) NOT NULL DEFAULT 'Organization',
+  `balance`    int(11)      NOT NULL DEFAULT 0,
+  `account_no` varchar(10)  NOT NULL,
+  `created_at` timestamp    NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`org_id`),
+  UNIQUE KEY `idx_org_account_no` (`account_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 10. Org members with roles
+CREATE TABLE IF NOT EXISTS `swisser_bank_org_members` (
+  `org_id`     varchar(50) NOT NULL,
+  `citizenid`  varchar(50) NOT NULL,
+  `role`       varchar(20) NOT NULL DEFAULT 'member',
+  `added_by`   varchar(50) DEFAULT NULL,
+  `added_at`   timestamp   NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`org_id`, `citizenid`),
+  KEY `idx_orgmember_cid` (`citizenid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 11. Org transaction audit log (who did what)
+CREATE TABLE IF NOT EXISTS `swisser_bank_org_transactions` (
+  `id`          int(11)      NOT NULL AUTO_INCREMENT,
+  `org_id`      varchar(50)  NOT NULL,
+  `citizenid`   varchar(50)  NOT NULL,
+  `player_name` varchar(100) NOT NULL,
+  `amount`      int(11)      NOT NULL,
+  `type`        varchar(20)  NOT NULL,
+  `label`       varchar(255) NOT NULL,
+  `date`        timestamp    NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_orgtx_org` (`org_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 12. Money laundering queue
+CREATE TABLE IF NOT EXISTS `swisser_bank_laundry` (
+  `citizenid`    varchar(50) NOT NULL,
+  `amount_dirty` int(11)     NOT NULL,
+  `amount_clean` int(11)     NOT NULL,
+  `ready_at`     int(11)     NOT NULL,
+  `collected`    tinyint(1)  NOT NULL DEFAULT 0,
+  `created_at`   timestamp   NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`citizenid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,25 +1,42 @@
 Locales = Locales or {}
 
 Locales['sv'] = {
+    -- Sidebar / navigation
     open_bank = "Öppna Banken",
     open_atm = "Sätt i Bankkort",
     welcome = "Välkommen till Swisser.Dev Bank",
     overview = "Översikt",
     transactions = "Transaktioner",
     transfer = "Swish & Överföring",
+    loans = "Lån",
+    org = "Organisation",
+    mailbox = "Inkorg",
     settings = "Inställningar",
     exit = "Logga ut",
+
+    -- Overview
     balance = "Tillgängligt belopp",
-    income = "Insättning",
-    outcome = "Uttag",
+    income = "Insättning (30d)",
+    outcome = "Uttag (30d)",
     my_account = "Privatkonto",
     deposit = "Sätt in",
     withdraw = "Ta ut",
+    analysis_title = "Ekonomisk Analys",
+    savings_goal = "Sparmål",
+    goal_settings = "Inställningar",
+    card_number_label = "Kontonummer",
+
+    -- Transfer
     fast_transfer = "Snabböverföring",
+    quick_transfer = "Snabböverföring",
     iban = "Kontonummer / IBAN",
+    transfer_iban_label = "Mottagarens IBAN / Kontonummer",
     amount = "Belopp",
+    transfer_amount_label = "Belopp att skicka",
     send = "Skicka pengar",
     recent_activity = "Senaste händelser",
+
+    -- Notifications
     success = "Klart",
     error = "Ett fel uppstod",
     transfer_sent = "Du skickade %s till %s",
@@ -29,10 +46,12 @@ Locales['sv'] = {
     account_not_found = "Mottagaren hittades inte",
     withdrawn = "Du tog ut %s",
     deposited = "Du satte in %s",
+
+    -- PIN / ATM
     enter_pin = "Ange din personliga kod",
     wrong_pin = "Felaktig kod, försök igen",
-    
-    -- Settings Page
+
+    -- Settings
     settings_title = "Säkerhet & Inställningar",
     current_pin = "Nuvarande kod",
     new_pin = "Ny kod (4 siffror)",
@@ -46,18 +65,74 @@ Locales['sv'] = {
     order_card = "Beställ Ny Design",
     reset_default = "Återställ Standard",
     card_cost_warning = "Avgift för design: %s",
+    avatar_design = "Profilbild",
+    update_avatar = "Uppdatera Bild",
+    avatar_cost_warning = "Avgift för bild: %s",
 
-    -- New Missing Translations
-    analysis_title = "Ekonomisk Analys",
-    savings_goal = "Sparmål",
-    goal_settings = "Inställningar",
-    card_number_label = "Kontonummer",
-    quick_transfer = "Snabböverföring",
-    transfer_iban_label = "Mottagarens IBAN / Kontonummer",
-    transfer_amount_label = "Belopp att skicka",
+    -- Savings goal modal
     update_goal_title = "Uppdatera Sparmål",
     goal_name_label = "Namn på målet (t.ex. Ny Bil)",
     goal_target_label = "Målbelopp",
     save_goal = "Spara Mål",
-    cancel = "Avbryt"
+    cancel = "Avbryt",
+
+    -- Loans
+    loans_title = "Lån",
+    take_loan = "Ansök om Lån",
+    repay_loan = "Betala Tillbaka",
+    loan_amount = "Lånebelopp",
+    loan_interest = "Ränta",
+    loan_total = "Totalt att betala",
+    loan_due = "Förfallodatum",
+    no_active_loan = "Inget Aktivt Lån",
+    no_active_loan_sub = "Låna pengar direkt och betala tillbaka med ränta.",
+    loan_outstanding = "Utestående Saldo",
+    loan_taken = "Lån på %s godkänt och insatt",
+    loan_repaid = "Lån på %s återbetalt",
+    loan_insufficient = "Otillräckliga medel för att betala lånet",
+    loan_already_active = "Du har redan ett aktivt lån",
+    loan_max_exceeded = "Beloppet överskrider maxgränsen",
+    loan_min_required = "Minsta lånebelopp är %s",
+    loan_disabled = "Lån är för närvarande inaktiverade",
+    loan_frozen_title = "Kontot Fryst",
+    loan_frozen_sub = "Uttag och överföringar är blockerade. Betala ditt lån för att låsa upp.",
+    loan_warning = "Att Låna pengar är inte gratis!",
+    loan_warning_sub = "Sena betalningar leder till dagliga varningar, 15% straffavgift dag 4 och fullständig kontospärr dag 7.",
+
+    -- Organization / gang account
+    org_title = "Organisation",
+    org_balance = "Saldo",
+    org_no_account = "Inget Organisationskonto",
+    org_no_account_sub = "Din organisation har inget bankkonto ännu. Kontakta en admin.",
+    org_deposit = "Sätt in (kontant)",
+    org_withdraw = "Ta ut (kontant)",
+    org_transfer = "Överför Ut",
+    org_members = "Medlemmar",
+    org_add_member = "Lägg till medlem via kontonummer",
+    org_activity = "Aktivitetslogg",
+    org_no_members = "Inga medlemmar ännu.",
+    org_no_activity = "Ingen aktivitet ännu.",
+
+    -- Server-side notifications (transfers, deposits, withdrawals)
+    notify_sent           = "✅ Skickade %s %s till %s (%s)",
+    notify_received       = "💸 Du fick %s %s från %s (%s)",
+    notify_deposited      = "✅ Satte in %s %s",
+    notify_withdrawn      = "✅ Tog ut %s %s",
+    notify_no_cash        = "❌ Otillräckligt kontantbelopp",
+    notify_no_funds       = "❌ Otillräckliga medel",
+    notify_frozen         = "🔒 Kontot är fryst — betala tillbaka ditt lån för att låsa upp",
+    mail_transfer_subject = "💸 Inkommande Överföring",
+    mail_transfer_body    = "%s (%s) skickade %s %s till dig.",
+    mail_transfer_offline = "%s (%s) skickade %s %s till dig medan du var borta.",
+
+    -- Money laundering NPC
+    laundry_talk = "Prata med honom...",
+    laundry_greeting = "Vad vill du? Skynda dig...",
+    laundry_submit = "Lämna det till mig. Kom tillbaka om en stund så är pengarna... renare.",
+    laundry_not_ready = "Ha tålamod. Jag håller fortfarande på. Kom tillbaka om %d sekunder.",
+    laundry_ready = "Här är din andel. Ren som ett nyfött barn.",
+    laundry_too_little = "Det är inte värt min tid. Ta med mer.",
+    laundry_too_much = "Det är alldeles för mycket. Jag kan inte röra de pengarna.",
+    laundry_no_black = "Jag ser inga smutsiga pengar på dig.",
+    laundry_already_pending = "Du har redan ett jobb igång. Kom tillbaka senare.",
 }
