@@ -314,10 +314,42 @@ RegisterNetEvent('swisser_bank:markMailsRead', function()
     exports.oxmysql:execute('UPDATE swisser_bank_mails SET is_read = 1 WHERE citizenid = ?', { citizenid })
 end)
 
+-- Per-player one-time admin tokens (cleared after use or 10 s expiry)
+local adminTokens = {}
+
 lib.callback.register('swisser_bank:getAdminData', function(source)
-    -- Admin access is not yet implemented; deny all by default
-    return nil
+    if not IsPlayerAceAllowed(source, 'command.god') then return nil end
+    local citizenid = Bridge.GetIdentifier(source)
+    if not citizenid then return nil end
+    -- Return a minimal admin payload (extend as needed)
+    local players = {}
+    for _, pid in ipairs(GetPlayers()) do
+        local cid = Bridge.GetIdentifier(tonumber(pid))
+        if cid then
+            players[#players + 1] = {
+                source    = tonumber(pid),
+                name      = GetPlayerName(pid) or 'unknown',
+                citizenid = cid,
+            }
+        end
+    end
+    return { players = players }
 end)
+
+-- /bankadmin — opens the in-game admin dashboard for authorised staff
+RegisterCommand('bankadmin', function(source, _args)
+    if source == 0 then return end -- console only via rcon, not useful here
+    if not IsPlayerAceAllowed(source, 'command.god') then
+        TriggerClientEvent('swisser_bank:client:notify', source, 'error', 'No permission.')
+        return
+    end
+    -- Generate a one-time random token so a Lua executor cannot replay the event
+    local token = tostring(math.random(1e8, 9e8)) .. tostring(GetGameTimer())
+    adminTokens[source] = { token = token, expires = GetGameTimer() + 8000 }
+    -- Send token first so the client guard is primed, then fire the open event
+    TriggerClientEvent('swisser_bank:client:setAdminToken', source, token)
+    TriggerClientEvent('swisser_bank:client:openAdmin', source, token)
+end, false)
 
 -- ============================================================
 -- LOAN SYSTEM

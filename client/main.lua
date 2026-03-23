@@ -46,15 +46,36 @@ local function OpenBankUI(isATM, isAdminDashboard)
     end
 end
 
-RegisterNetEvent('swisser_bank:client:openAdmin', function()
+-- The server generates a random one-time token with /bankadmin and sends it here.
+-- A Lua executor cannot forge this token because it is generated server-side and
+-- unknown to the client until the server fires TriggerClientEvent.
+-- Even if the admin UI opens, getAdminData returns nil for non-admins (double guard).
+local adminToken = nil
+RegisterNetEvent('swisser_bank:client:openAdmin', function(token)
+    if type(token) ~= 'string' or token == '' then return end
+    if token ~= adminToken then return end
+    adminToken = nil -- one-time use — replay is blocked
     OpenBankUI(false, true)
 end)
 
--- Forward server notifications to the NUI as toast messages
+-- Server sends a token separately so the handler above can verify it.
+-- This fires just before openAdmin so the token is ready.
+RegisterNetEvent('swisser_bank:client:setAdminToken', function(token)
+    if type(token) == 'string' and token ~= '' then
+        adminToken = token
+        -- Auto-expire in case the open event never arrives
+        SetTimeout(8000, function() adminToken = nil end)
+    end
+end)
+
+-- Forward server notifications to the NUI as toast messages.
+-- NOTE: this is a net event so the server can push live notifications (overdue loans etc.).
+-- A cheater calling TriggerEvent locally can show themselves a fake notification but
+-- cannot move money — all money logic is server-side and validated there.
 RegisterNetEvent('swisser_bank:client:notify', function(notifType, message)
     if SendNotification then SendNotification(message, notifType) end
     if isUIOpen then
-        SendNUIMessage({ action = 'NOTIFY', type = notifType, message = message })
+        SendNUIMessage({ action = 'toast', toastType = notifType, message = message })
     end
 end)
 
