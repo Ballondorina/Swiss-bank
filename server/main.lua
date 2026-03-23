@@ -209,20 +209,33 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
     if targetData.citizenid == citizenid then return end -- Prevent self-transfer
 
     local myShortAccount = GetUserAccountNumber(citizenid)
-    local targetSrc = Bridge.GetPlayerByCID(targetData.citizenid)
+    local senderName     = Bridge.GetName(src)
+    local targetSrc      = Bridge.GetPlayerByCID(targetData.citizenid)
 
     if targetSrc then
         -- Online player transfer
+        local targetName = Bridge.GetName(targetSrc)
         Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Transfer Sent')
         Bridge.AdjustMoney(targetSrc, 'bank', amount, 'add', 'Transfer Received')
-        CreateLog(citizenid, amount, 'outcome', 'To: ' .. accountNo, 'personal')
-        CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. myShortAccount, 'personal')
-        SendBankMail(targetData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency, "Wire Transfer")
-        -- Live notification to the receiver while they are online
+        CreateLog(citizenid, amount, 'outcome', 'To: ' .. targetName .. ' (' .. accountNo .. ')', 'personal')
+        CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. senderName .. ' (' .. myShortAccount .. ')', 'personal')
+        SendBankMail(
+            targetData.citizenid,
+            "💸 Incoming Transfer",
+            senderName .. " (" .. myShortAccount .. ") sent you " .. amount .. " " .. Config.Currency .. ".",
+            "Wire Transfer"
+        )
+        -- Sender confirmation
+        TriggerClientEvent('swisser_bank:client:notify', src, 'success',
+            '✅ Sent ' .. amount .. ' ' .. Config.Currency .. ' to ' .. targetName .. ' (' .. accountNo .. ')')
+        -- Live notification to the receiver
         TriggerClientEvent('swisser_bank:client:notify', targetSrc, 'success',
-            '💸 You received ' .. amount .. ' ' .. Config.Currency .. ' (from account ' .. myShortAccount .. ')')
+            '💸 You received ' .. amount .. ' ' .. Config.Currency .. ' from ' .. senderName .. ' (' .. myShortAccount .. ')')
     else
-        -- Offline player transfer
+        -- Offline player transfer — look up target name from DB
+        local targetName = Bridge.GetNameByCID(targetData.citizenid)
+        local transferred = false
+
         if CurrentFramework == 'qb' then
             local offlineTarget = exports.oxmysql:single_async('SELECT money FROM players WHERE citizenid = ?', { targetData.citizenid })
             if offlineTarget then
@@ -230,19 +243,28 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
                 money.bank = money.bank + amount
                 Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Transfer Sent')
                 exports.oxmysql:execute('UPDATE players SET money = ? WHERE citizenid = ?', { json.encode(money), targetData.citizenid })
-                CreateLog(citizenid, amount, 'outcome', 'To: ' .. accountNo, 'personal')
-                CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. myShortAccount, 'personal')
-                SendBankMail(targetData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency .. " while you were away.", "Wire Transfer")
+                transferred = true
             end
         elseif CurrentFramework == 'esx' then
             local offlineBalance = exports.oxmysql:scalar_async('SELECT `bank` FROM `users` WHERE `identifier` = ?', { targetData.citizenid })
             if offlineBalance ~= nil then
                 Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Transfer Sent')
                 exports.oxmysql:execute('UPDATE `users` SET `bank` = `bank` + ? WHERE `identifier` = ?', { amount, targetData.citizenid })
-                CreateLog(citizenid, amount, 'outcome', 'To: ' .. accountNo, 'personal')
-                CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. myShortAccount, 'personal')
-                SendBankMail(targetData.citizenid, "Incoming Transfer", "You received " .. amount .. " " .. Config.Currency .. " while you were away.", "Wire Transfer")
+                transferred = true
             end
+        end
+
+        if transferred then
+            CreateLog(citizenid, amount, 'outcome', 'To: ' .. targetName .. ' (' .. accountNo .. ')', 'personal')
+            CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. senderName .. ' (' .. myShortAccount .. ')', 'personal')
+            SendBankMail(
+                targetData.citizenid,
+                "💸 Incoming Transfer",
+                senderName .. " (" .. myShortAccount .. ") sent you " .. amount .. " " .. Config.Currency .. " while you were away.",
+                "Wire Transfer"
+            )
+            TriggerClientEvent('swisser_bank:client:notify', src, 'success',
+                '✅ Sent ' .. amount .. ' ' .. Config.Currency .. ' to ' .. targetName .. ' (' .. accountNo .. ')')
         end
     end
 end)

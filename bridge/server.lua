@@ -135,4 +135,21 @@ function Bridge.AdjustBlackMoney(source, amount, adjType)
     end
 end
 
+-- Look up a player's display name by citizenid (works offline via DB)
+function Bridge.GetNameByCID(citizenid)
+    if CurrentFramework == 'qb' then
+        local row = exports.oxmysql:single_async('SELECT charinfo FROM players WHERE citizenid = ?', { citizenid })
+        if row and row.charinfo then
+            local ok, info = pcall(json.decode, row.charinfo)
+            if ok and info then
+                return (info.firstname or '') .. ' ' .. (info.lastname or '')
+            end
+        end
+    else
+        local row = exports.oxmysql:single_async('SELECT firstname, lastname FROM users WHERE identifier = ?', { citizenid })
+        if row then return (row.firstname or '') .. ' ' .. (row.lastname or '') end
+    end
+    return 'Unknown'
+end
+
 -- Bridge is global, no return needed
