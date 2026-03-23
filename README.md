@@ -9,7 +9,7 @@ A high-quality, modern banking interface featuring savings goals, custom card de
 </div>
 
 **Ballondorina & Special thanks to [Swisser Team](https://github.com/SwisserDev) for letting me use their Ai! Check them out [Swisser AI](https://ai.swisser.dev/)**  
- Thanks to OKOK for the inspiration!
+ 
 
 <div align="center">
 
