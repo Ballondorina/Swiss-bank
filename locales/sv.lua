@@ -113,6 +113,18 @@ Locales['sv'] = {
     org_no_members = "Inga medlemmar ännu.",
     org_no_activity = "Ingen aktivitet ännu.",
 
+    -- Server-side notifications (transfers, deposits, withdrawals)
+    notify_sent           = "✅ Skickade %s %s till %s (%s)",
+    notify_received       = "💸 Du fick %s %s från %s (%s)",
+    notify_deposited      = "✅ Satte in %s %s",
+    notify_withdrawn      = "✅ Tog ut %s %s",
+    notify_no_cash        = "❌ Otillräckligt kontantbelopp",
+    notify_no_funds       = "❌ Otillräckliga medel",
+    notify_frozen         = "🔒 Kontot är fryst — betala tillbaka ditt lån för att låsa upp",
+    mail_transfer_subject = "💸 Inkommande Överföring",
+    mail_transfer_body    = "%s (%s) skickade %s %s till dig.",
+    mail_transfer_offline = "%s (%s) skickade %s %s till dig medan du var borta.",
+
     -- Money laundering NPC
     laundry_talk = "Prata med honom...",
     laundry_greeting = "Vad vill du? Skynda dig...",

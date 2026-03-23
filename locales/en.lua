@@ -113,6 +113,18 @@ Locales['en'] = {
     org_no_members = "No members yet.",
     org_no_activity = "No activity yet.",
 
+    -- Server-side notifications (transfers, deposits, withdrawals)
+    notify_sent           = "✅ Sent %s %s to %s (%s)",
+    notify_received       = "💸 You received %s %s from %s (%s)",
+    notify_deposited      = "✅ Deposited %s %s",
+    notify_withdrawn      = "✅ Withdrew %s %s",
+    notify_no_cash        = "❌ Insufficient cash for deposit",
+    notify_no_funds       = "❌ Insufficient funds for withdrawal",
+    notify_frozen         = "🔒 Account frozen — repay your loan to unlock",
+    mail_transfer_subject = "💸 Incoming Transfer",
+    mail_transfer_body    = "%s (%s) sent you %s %s.",
+    mail_transfer_offline = "%s (%s) sent you %s %s while you were away.",
+
     -- Money laundering NPC
     laundry_talk = "Talk to him...",
     laundry_greeting = "What do you want? Make it quick...",

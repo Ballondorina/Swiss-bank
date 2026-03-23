@@ -1,6 +1,15 @@
 local dbReady = false
 local Cooldowns = {}
 
+-- Server-side locale helper (Locales is a shared_script, available here too)
+local function LS(key, ...)
+    local lang = Config.Language or 'en'
+    local tbl  = (Locales and Locales[lang]) or (Locales and Locales['en']) or {}
+    local str  = tbl[key] or key
+    if select('#', ...) > 0 then return string.format(str, ...) end
+    return str
+end
+
 local function GenerateAccountNumber(tableCheck)
     tableCheck = tableCheck or 'swisser_bank_pins'
     for _ = 1, 100 do
@@ -158,9 +167,9 @@ RegisterNetEvent('swisser_bank:deposit', function(amount, accountType)
     if Bridge.AdjustMoney(src, 'cash', amount, 'remove', 'Bank Deposit') then
         Bridge.AdjustMoney(src, 'bank', amount, 'add', 'Bank Deposit')
         CreateLog(citizenid, amount, 'income', 'Bank Deposit', 'personal')
-        TriggerClientEvent('swisser_bank:client:notify', src, 'success', 'Deposited ' .. amount .. ' ' .. Config.Currency)
+        TriggerClientEvent('swisser_bank:client:notify', src, 'success', LS('notify_deposited', amount, Config.Currency))
     else
-        TriggerClientEvent('swisser_bank:client:notify', src, 'error', 'Insufficient cash for deposit')
+        TriggerClientEvent('swisser_bank:client:notify', src, 'error', LS('notify_no_cash'))
     end
 end)
 
@@ -178,16 +187,16 @@ RegisterNetEvent('swisser_bank:withdraw', function(amount, accountType)
     if not citizenid or amount <= 0 or amount > 10000000 then return end
 
     if IsAccountLocked(citizenid) then
-        TriggerClientEvent('swisser_bank:client:notify', src, 'error', '🔒 Account frozen due to overdue loan. Repay your loan to unlock.')
+        TriggerClientEvent('swisser_bank:client:notify', src, 'error', LS('notify_frozen'))
         return
     end
 
     if Bridge.AdjustMoney(src, 'bank', amount, 'remove', 'Bank Withdraw') then
         Bridge.AdjustMoney(src, 'cash', amount, 'add', 'Bank Withdraw')
         CreateLog(citizenid, amount, 'outcome', 'Bank Withdraw', 'personal')
-        TriggerClientEvent('swisser_bank:client:notify', src, 'success', 'Withdrew ' .. amount .. ' ' .. Config.Currency)
+        TriggerClientEvent('swisser_bank:client:notify', src, 'success', LS('notify_withdrawn', amount, Config.Currency))
     else
-        TriggerClientEvent('swisser_bank:client:notify', src, 'error', 'Insufficient funds for withdrawal')
+        TriggerClientEvent('swisser_bank:client:notify', src, 'error', LS('notify_no_funds'))
     end
 end)
 
@@ -200,7 +209,7 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
     if Bridge.GetBankBalance(src) < amount then return end
 
     if IsAccountLocked(citizenid) then
-        TriggerClientEvent('swisser_bank:client:notify', src, 'error', '🔒 Account frozen due to overdue loan. Repay your loan to unlock.')
+        TriggerClientEvent('swisser_bank:client:notify', src, 'error', LS('notify_frozen'))
         return
     end
 
@@ -221,16 +230,14 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
         CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. senderName .. ' (' .. myShortAccount .. ')', 'personal')
         SendBankMail(
             targetData.citizenid,
-            "💸 Incoming Transfer",
-            senderName .. " (" .. myShortAccount .. ") sent you " .. amount .. " " .. Config.Currency .. ".",
+            LS('mail_transfer_subject'),
+            LS('mail_transfer_body', senderName, myShortAccount, amount, Config.Currency),
             "Wire Transfer"
         )
-        -- Sender confirmation
         TriggerClientEvent('swisser_bank:client:notify', src, 'success',
-            '✅ Sent ' .. amount .. ' ' .. Config.Currency .. ' to ' .. targetName .. ' (' .. accountNo .. ')')
-        -- Live notification to the receiver
+            LS('notify_sent', amount, Config.Currency, targetName, accountNo))
         TriggerClientEvent('swisser_bank:client:notify', targetSrc, 'success',
-            '💸 You received ' .. amount .. ' ' .. Config.Currency .. ' from ' .. senderName .. ' (' .. myShortAccount .. ')')
+            LS('notify_received', amount, Config.Currency, senderName, myShortAccount))
     else
         -- Offline player transfer — look up target name from DB
         local targetName = Bridge.GetNameByCID(targetData.citizenid)
@@ -259,12 +266,12 @@ RegisterNetEvent('swisser_bank:transfer', function(accountNo, amount, accountTyp
             CreateLog(targetData.citizenid, amount, 'income', 'From: ' .. senderName .. ' (' .. myShortAccount .. ')', 'personal')
             SendBankMail(
                 targetData.citizenid,
-                "💸 Incoming Transfer",
-                senderName .. " (" .. myShortAccount .. ") sent you " .. amount .. " " .. Config.Currency .. " while you were away.",
+                LS('mail_transfer_subject'),
+                LS('mail_transfer_offline', senderName, myShortAccount, amount, Config.Currency),
                 "Wire Transfer"
             )
             TriggerClientEvent('swisser_bank:client:notify', src, 'success',
-                '✅ Sent ' .. amount .. ' ' .. Config.Currency .. ' to ' .. targetName .. ' (' .. accountNo .. ')')
+                LS('notify_sent', amount, Config.Currency, targetName, accountNo))
         end
     end
 end)
