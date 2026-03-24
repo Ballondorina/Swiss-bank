@@ -1,0 +1,439 @@
+-- ============================================================
+-- UNDERWORLD — Server: Main
+-- ============================================================
+
+-- ============================================================
+-- HELPERS
+-- ============================================================
+
+local function GetCitizenId(src)
+    local Player = exports.qbx_core:GetPlayer(src)
+    if not Player then return nil end
+    return Player.PlayerData.citizenid
+end
+
+local function GetQBPlayer(src)
+    return exports.qbx_core:GetPlayer(src)
+end
+
+local function GetPlayerByCitizenId(citizenId)
+    for _, src in ipairs(GetPlayers()) do
+        local cid = GetCitizenId(tonumber(src))
+        if cid == citizenId then return tonumber(src) end
+    end
+    return nil
+end
+
+local function GetPlayerOrg(citizenId)
+    return MySQL.single.await(
+        'SELECT o.*, m.rank, m.loyalty, m.division, m.weekly_contribution, m.salary ' ..
+        'FROM uw_organizations o ' ..
+        'JOIN uw_members m ON o.id = m.org_id ' ..
+        'WHERE m.citizen_id = ?',
+        { citizenId }
+    )
+end
+
+local function AddLedger(orgId, citizenId, txType, amount, description)
+    MySQL.insert.await(
+        'INSERT INTO uw_ledger (org_id, citizen_id, type, amount, description) VALUES (?, ?, ?, ?, ?)',
+        { orgId, citizenId, txType, amount, description }
+    )
+end
+
+local function NotifyOrg(orgId, notify)
+    local members = MySQL.query.await('SELECT citizen_id FROM uw_members WHERE org_id = ?', { orgId })
+    for _, m in ipairs(members) do
+        local src = GetPlayerByCitizenId(m.citizen_id)
+        if src then TriggerClientEvent('ox_lib:notify', src, notify) end
+    end
+end
+
+-- Export helpers for other server files
+_ENV.GetCitizenId        = GetCitizenId
+_ENV.GetQBPlayer         = GetQBPlayer
+_ENV.GetPlayerOrg        = GetPlayerOrg
+_ENV.GetPlayerByCitizenId = GetPlayerByCitizenId
+_ENV.AddLedger           = AddLedger
+_ENV.NotifyOrg           = NotifyOrg
+
+-- ============================================================
+-- ORG DATA — fetch panel payload
+-- ============================================================
+
+RegisterNetEvent('underworld:server:getOrgData', function()
+    local src = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org then
+        TriggerClientEvent('underworld:client:openPanel', src, nil)
+        return
+    end
+
+    -- Generate today's missions if not yet done
+    TriggerEvent('underworld:internal:generateMissions', org.id)
+
+    local members = MySQL.query.await(
+        'SELECT citizen_id, name, rank, division, loyalty, weekly_contribution, total_contribution, salary ' ..
+        'FROM uw_members WHERE org_id = ? ORDER BY rank DESC',
+        { org.id }
+    )
+
+    local ledger = MySQL.query.await(
+        'SELECT * FROM uw_ledger WHERE org_id = ? ORDER BY created_at DESC LIMIT 50',
+        { org.id }
+    )
+
+    local today = os.date('%Y-%m-%d')
+    local missions = MySQL.query.await(
+        'SELECT * FROM uw_daily_missions WHERE org_id = ? AND DATE(created_at) = ? ORDER BY status ASC',
+        { org.id, today }
+    )
+
+    TriggerClientEvent('underworld:client:openPanel', src, {
+        org         = org,
+        members     = members,
+        ledger      = ledger,
+        missions    = missions,
+        myRank      = org.rank,
+        myCitizenId = citizenId
+    })
+end)
+
+-- ============================================================
+-- VAULT — deposit / withdraw
+-- ============================================================
+
+RegisterNetEvent('underworld:server:deposit', function(amount)
+    local src     = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org then return end
+
+    local Player = GetQBPlayer(src)
+    if not Player then return end
+
+    local cash = Player.PlayerData.money['cash']
+    if cash < amount then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Not enough cash on you.' })
+        return
+    end
+
+    Player.Functions.RemoveMoney('cash', amount, 'underworld-deposit')
+    MySQL.update.await('UPDATE uw_organizations SET vault = vault + ? WHERE id = ?', { amount, org.id })
+    MySQL.update.await(
+        'UPDATE uw_members SET weekly_contribution = weekly_contribution + ?, total_contribution = total_contribution + ? WHERE citizen_id = ? AND org_id = ?',
+        { amount, amount, citizenId, org.id }
+    )
+    AddLedger(org.id, citizenId, 'deposit', amount, 'Cash deposit')
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = ('Deposited $%s to the vault.'):format(amount) })
+end)
+
+RegisterNetEvent('underworld:server:withdraw', function(amount)
+    local src     = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org then return end
+
+    local rankData = Config.Ranks[org.rank]
+    if not rankData or not rankData.canWithdraw then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Your rank cannot withdraw from the vault.' })
+        return
+    end
+
+    local todayWithdrawn = MySQL.scalar.await(
+        'SELECT COALESCE(SUM(amount), 0) FROM uw_withdraw_log WHERE org_id = ? AND citizen_id = ? AND date = CURDATE()',
+        { org.id, citizenId }
+    ) or 0
+
+    if (todayWithdrawn + amount) > rankData.dailyWithdraw then
+        local remaining = math.max(0, rankData.dailyWithdraw - todayWithdrawn)
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = ('Daily limit: $%s. Remaining today: $%s.'):format(rankData.dailyWithdraw, remaining)
+        })
+        return
+    end
+
+    if org.vault < amount then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Vault does not have enough funds.' })
+        return
+    end
+
+    local Player = GetQBPlayer(src)
+    if not Player then return end
+
+    MySQL.update.await('UPDATE uw_organizations SET vault = vault - ? WHERE id = ?', { amount, org.id })
+    MySQL.insert.await(
+        'INSERT INTO uw_withdraw_log (org_id, citizen_id, amount) VALUES (?, ?, ?)',
+        { org.id, citizenId, amount }
+    )
+    Player.Functions.AddMoney('cash', amount, 'underworld-withdraw')
+    AddLedger(org.id, citizenId, 'withdrawal', -amount, 'Vault withdrawal')
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = ('Withdrew $%s from the vault.'):format(amount) })
+end)
+
+-- ============================================================
+-- MEMBERSHIP — invite / accept / kick / rank / salary
+-- ============================================================
+
+RegisterNetEvent('underworld:server:invitePlayer', function(targetSrc)
+    local src     = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org then return end
+
+    if org.rank < 3 then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Only Kaptens and above can invite.' })
+        return
+    end
+
+    local memberCount = MySQL.scalar.await('SELECT COUNT(*) FROM uw_members WHERE org_id = ?', { org.id }) or 0
+    local tier = Config.Tiers[org.tier]
+    if memberCount >= tier.maxMembers then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = ('Member cap reached (%s). Upgrade your office tier.'):format(tier.maxMembers)
+        })
+        return
+    end
+
+    local targetCitizenId = GetCitizenId(tonumber(targetSrc))
+    if not targetCitizenId then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Player not found.' })
+        return
+    end
+
+    local existing = MySQL.scalar.await('SELECT id FROM uw_members WHERE citizen_id = ?', { targetCitizenId })
+    if existing then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'That player is already in an organization.' })
+        return
+    end
+
+    TriggerClientEvent('underworld:client:orgInvite', tonumber(targetSrc), {
+        orgId      = org.id,
+        orgName    = org.label,
+        inviterName = GetPlayerName(src)
+    })
+end)
+
+RegisterNetEvent('underworld:server:acceptInvite', function(orgId)
+    local src     = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local existing = MySQL.scalar.await('SELECT id FROM uw_members WHERE citizen_id = ?', { citizenId })
+    if existing then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'You are already in an organization.' })
+        return
+    end
+
+    local org = MySQL.single.await('SELECT * FROM uw_organizations WHERE id = ?', { orgId })
+    if not org then return end
+
+    local memberCount = MySQL.scalar.await('SELECT COUNT(*) FROM uw_members WHERE org_id = ?', { org.id }) or 0
+    local tier = Config.Tiers[org.tier]
+    if memberCount >= tier.maxMembers then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'That organization is full.' })
+        return
+    end
+
+    MySQL.insert.await(
+        'INSERT INTO uw_members (org_id, citizen_id, name, rank) VALUES (?, ?, ?, 1)',
+        { org.id, citizenId, GetPlayerName(src) }
+    )
+    TriggerClientEvent('ox_lib:notify', src, {
+        type = 'success',
+        description = ('Welcome to %s. You start as Associé.'):format(org.label)
+    })
+
+    NotifyOrg(org.id, {
+        type = 'inform',
+        description = ('[ORG] %s has joined as Associé.'):format(GetPlayerName(src))
+    })
+end)
+
+RegisterNetEvent('underworld:server:kickMember', function(targetCitizenId)
+    local src     = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org or org.rank < 4 then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Insufficient rank to kick members.' })
+        return
+    end
+
+    local target = MySQL.single.await(
+        'SELECT * FROM uw_members WHERE citizen_id = ? AND org_id = ?',
+        { targetCitizenId, org.id }
+    )
+    if not target then return end
+
+    if target.rank >= org.rank then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Cannot kick someone of equal or higher rank.' })
+        return
+    end
+
+    MySQL.update.await('DELETE FROM uw_members WHERE citizen_id = ? AND org_id = ?', { targetCitizenId, org.id })
+
+    local targetSrc = GetPlayerByCitizenId(targetCitizenId)
+    if targetSrc then
+        TriggerClientEvent('ox_lib:notify', targetSrc, {
+            type = 'error',
+            description = ('You have been removed from %s.'):format(org.label)
+        })
+    end
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = 'Member removed.' })
+end)
+
+RegisterNetEvent('underworld:server:setRank', function(targetCitizenId, newRank)
+    local src     = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org or org.rank < 5 then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Only the Direktör can change ranks.' })
+        return
+    end
+
+    newRank = math.max(1, math.min(4, math.floor(tonumber(newRank) or 1)))
+    MySQL.update.await(
+        'UPDATE uw_members SET rank = ? WHERE citizen_id = ? AND org_id = ?',
+        { newRank, targetCitizenId, org.id }
+    )
+
+    local rankName = Config.Ranks[newRank].name
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = ('Rank updated to %s.'):format(rankName) })
+
+    local targetSrc = GetPlayerByCitizenId(targetCitizenId)
+    if targetSrc then
+        TriggerClientEvent('ox_lib:notify', targetSrc, {
+            type = 'inform',
+            description = ('[ORG] Your rank has been updated to %s.'):format(rankName)
+        })
+    end
+end)
+
+RegisterNetEvent('underworld:server:setSalary', function(targetCitizenId, salary)
+    local src     = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org or org.rank < 5 then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Only the Direktör can set salaries.' })
+        return
+    end
+
+    salary = math.max(0, math.floor(tonumber(salary) or 0))
+    MySQL.update.await(
+        'UPDATE uw_members SET salary = ? WHERE citizen_id = ? AND org_id = ?',
+        { salary, targetCitizenId, org.id }
+    )
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = ('Salary set to $%s/week.'):format(salary) })
+end)
+
+RegisterNetEvent('underworld:server:leaveOrg', function()
+    local src     = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org then return end
+
+    if org.rank == 5 then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = 'The Direktör cannot leave. Transfer leadership first.'
+        })
+        return
+    end
+
+    MySQL.update.await('DELETE FROM uw_members WHERE citizen_id = ? AND org_id = ?', { citizenId, org.id })
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = ('You have left %s.'):format(org.label) })
+end)
+
+-- ============================================================
+-- ADMIN COMMAND — create org
+-- ============================================================
+
+RegisterCommand('uwcreateorg', function(source, args)
+    if source ~= 0 and not IsPlayerAceAllowed(tostring(source), 'command.uwcreateorg') then
+        if source ~= 0 then
+            TriggerClientEvent('ox_lib:notify', source, { type = 'error', description = 'No permission.' })
+        end
+        return
+    end
+
+    -- Usage: /uwcreateorg <name> <type> <tier> <label...>
+    local name    = args[1]
+    local orgType = args[2]
+    local tier    = tonumber(args[3]) or 1
+    local label   = table.concat(args, ' ', 4)
+
+    if not name or not orgType or label == '' then
+        print('[UNDERWORLD] Usage: /uwcreateorg <name> <type: legal/illegal/family> <tier: 1-4> <label>')
+        return
+    end
+
+    if not Config.OrgTypes[orgType] then
+        print('[UNDERWORLD] Invalid type. Valid: legal, illegal, family')
+        return
+    end
+
+    MySQL.insert.await(
+        'INSERT INTO uw_organizations (name, label, type, tier) VALUES (?, ?, ?, ?)',
+        { name, label, orgType, tier }
+    )
+    print(('[UNDERWORLD] Created org "%s" (%s) at tier %s.'):format(label, orgType, tier))
+end, true)
+
+-- Admin: set a player as Direktör of their org
+RegisterCommand('uwsetdirektor', function(source, args)
+    if source ~= 0 and not IsPlayerAceAllowed(tostring(source), 'command.uwcreateorg') then return end
+
+    local targetSrc = tonumber(args[1])
+    local orgName   = args[2]
+    if not targetSrc or not orgName then
+        print('[UNDERWORLD] Usage: /uwsetdirektor <playerid> <orgname>')
+        return
+    end
+
+    local citizenId = GetCitizenId(targetSrc)
+    if not citizenId then print('[UNDERWORLD] Player not found.') return end
+
+    local org = MySQL.single.await('SELECT * FROM uw_organizations WHERE name = ?', { orgName })
+    if not org then print('[UNDERWORLD] Org not found.') return end
+
+    local existing = MySQL.scalar.await('SELECT id FROM uw_members WHERE citizen_id = ?', { citizenId })
+    if existing then
+        MySQL.update.await('UPDATE uw_members SET rank = 5, org_id = ? WHERE citizen_id = ?', { org.id, citizenId })
+    else
+        MySQL.insert.await(
+            'INSERT INTO uw_members (org_id, citizen_id, name, rank) VALUES (?, ?, ?, 5)',
+            { org.id, citizenId, GetPlayerName(targetSrc) }
+        )
+    end
+
+    TriggerClientEvent('ox_lib:notify', targetSrc, {
+        type = 'success',
+        description = ('You are now the Direktör of %s.'):format(org.label)
+    })
+    print(('[UNDERWORLD] %s set as Direktör of %s.'):format(GetPlayerName(targetSrc), org.label))
+end, true)

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNDERWORLD</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="panel" class="hidden">
+    <div class="overlay" onclick="closePanel()"></div>
+    <div class="container">
+
+        <!-- HEADER -->
+        <div class="header">
+            <div class="header-left">
+                <div class="type-badge" id="type-badge">ILLEGAL</div>
+                <div class="org-info">
+                    <h1 id="org-name">—</h1>
+                    <span id="org-tier">Tier 1 · Street</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="vault-box">
+                    <span class="vault-label">VAULT</span>
+                    <span class="vault-val" id="vault-val">$0</span>
+                </div>
+                <button class="close-btn" onclick="closePanel()">✕</button>
+            </div>
+        </div>
+
+        <!-- NAV -->
+        <nav class="nav">
+            <button class="nav-btn active" data-tab="overview"  onclick="showTab('overview',  this)">Overview</button>
+            <button class="nav-btn"        data-tab="members"   onclick="showTab('members',   this)">Members</button>
+            <button class="nav-btn"        data-tab="missions"  onclick="showTab('missions',  this)">Missions</button>
+            <button class="nav-btn"        data-tab="vault"     onclick="showTab('vault',     this)">Vault</button>
+            <button class="nav-btn"        data-tab="ledger"    onclick="showTab('ledger',    this)">Ledger</button>
+        </nav>
+
+        <!-- CONTENT -->
+        <div class="content">
+
+            <!-- OVERVIEW -->
+            <div id="tab-overview" class="tab active">
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <span class="stat-lbl">Members</span>
+                        <span class="stat-val" id="s-members">0</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-lbl">Missions Today</span>
+                        <span class="stat-val" id="s-missions">0/0</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-lbl">Passive Rate</span>
+                        <span class="stat-val" id="s-rate">0%</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-lbl">Your Rank</span>
+                        <span class="stat-val" id="s-rank">—</span>
+                    </div>
+                </div>
+
+                <div class="passive-block">
+                    <div class="passive-head">
+                        <span>Daily Passive Income</span>
+                        <span id="passive-nums">$0 / $0</span>
+                    </div>
+                    <div class="bar-track">
+                        <div class="bar-fill" id="bar-fill" style="width:0%"></div>
+                    </div>
+                    <p class="passive-hint">Complete daily missions to earn passive income. Hitting the full target unlocks max rate.</p>
+                </div>
+
+                <div class="section-head">Top Contributors This Week</div>
+                <div id="contrib-list"></div>
+            </div>
+
+            <!-- MEMBERS -->
+            <div id="tab-members" class="tab">
+                <div id="members-list"></div>
+            </div>
+
+            <!-- MISSIONS -->
+            <div id="tab-missions" class="tab">
+                <p class="section-hint">Each mission pays directly into the org vault and counts toward your daily passive income target.</p>
+                <div id="missions-list"></div>
+            </div>
+
+            <!-- VAULT -->
+            <div id="tab-vault" class="tab">
+                <div class="vault-grid">
+                    <div class="vault-card">
+                        <h3>Deposit Cash</h3>
+                        <p>Transfer cash from your pocket into the org vault.</p>
+                        <div class="input-row">
+                            <input id="dep-amt" type="number" placeholder="Amount" min="1">
+                            <button class="btn green" onclick="doDeposit()">Deposit</button>
+                        </div>
+                    </div>
+                    <div class="vault-card">
+                        <h3>Withdraw Cash</h3>
+                        <p>Subject to your daily rank limit. Logged in the ledger.</p>
+                        <div class="input-row">
+                            <input id="wd-amt" type="number" placeholder="Amount" min="1">
+                            <button class="btn red" onclick="doWithdraw()">Withdraw</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="vault-leave-section">
+                    <button class="btn grey" onclick="leaveOrg()">Leave Organization</button>
+                </div>
+            </div>
+
+            <!-- LEDGER -->
+            <div id="tab-ledger" class="tab">
+                <div id="ledger-list"></div>
+            </div>
+
+        </div>
+    </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
