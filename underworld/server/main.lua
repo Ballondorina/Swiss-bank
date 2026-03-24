@@ -1,5 +1,6 @@
 -- ============================================================
--- UNDERWORLD — Server: Main
+-- UNDERWORLD — Server: Main (v2)
+-- New: stash registration, extended getOrgData, heat, leaderboard
 -- ============================================================
 
 -- ============================================================
@@ -50,19 +51,90 @@ local function NotifyOrg(orgId, notify)
 end
 
 -- Export helpers for other server files
-_ENV.GetCitizenId        = GetCitizenId
-_ENV.GetQBPlayer         = GetQBPlayer
-_ENV.GetPlayerOrg        = GetPlayerOrg
+_ENV.GetCitizenId         = GetCitizenId
+_ENV.GetQBPlayer          = GetQBPlayer
+_ENV.GetPlayerOrg         = GetPlayerOrg
 _ENV.GetPlayerByCitizenId = GetPlayerByCitizenId
-_ENV.AddLedger           = AddLedger
-_ENV.NotifyOrg           = NotifyOrg
+_ENV.AddLedger            = AddLedger
+_ENV.NotifyOrg            = NotifyOrg
 
 -- ============================================================
--- ORG DATA — fetch panel payload
+-- STASH REGISTRATION ON STARTUP
+-- ============================================================
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    if GetResourceState('ox_inventory') ~= 'started' then return end
+
+    CreateThread(function()
+        Wait(1000) -- brief wait for ox_inventory to settle
+        local orgs = MySQL.query.await('SELECT id, label, tier, level FROM uw_organizations')
+        if not orgs then return end
+        for _, org in ipairs(orgs) do
+            local slots  = GetStashSlots(org.tier, org.level or 1)
+            local weight = GetStashWeight(org.tier)
+            exports.ox_inventory:RegisterStash(
+                ('uw_stash_%d'):format(org.id),
+                ('%s — Org Stash'):format(org.label),
+                slots,
+                weight
+            )
+        end
+        print(('[UNDERWORLD] Registered %d org stashes.'):format(#orgs))
+    end)
+end)
+
+-- ============================================================
+-- LEADERBOARD QUERY (server callback)
+-- ============================================================
+
+local function BuildLeaderboard()
+    -- Earnings leaderboard: sum of passive + mission rewards this week
+    local earnings = MySQL.query.await(
+        'SELECT org_id, SUM(amount) as total FROM uw_ledger ' ..
+        'WHERE type IN ("mission_reward", "passive_income", "zone_bonus") ' ..
+        'AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) ' ..
+        'GROUP BY org_id ORDER BY total DESC LIMIT 5'
+    ) or {}
+
+    -- Mission completions this week
+    local missions = MySQL.query.await(
+        'SELECT org_id, COUNT(*) as total FROM uw_daily_missions ' ..
+        'WHERE status = "completed" AND completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) ' ..
+        'GROUP BY org_id ORDER BY total DESC LIMIT 5'
+    ) or {}
+
+    -- Territory: sum of influence scores
+    local territory = GetTerritoryLeaderboard()
+
+    -- Enrich with org names
+    local function enrich(rows, valueKey)
+        local result = {}
+        for _, r in ipairs(rows) do
+            local org = MySQL.single.await('SELECT label, type FROM uw_organizations WHERE id = ?', { r.org_id })
+            result[#result + 1] = {
+                org_id = r.org_id,
+                label  = org and org.label or 'Unknown',
+                type   = org and org.type  or 'illegal',
+                value  = r[valueKey] or r.total or 0
+            }
+        end
+        return result
+    end
+
+    return {
+        earnings  = enrich(earnings, 'total'),
+        missions  = enrich(missions, 'total'),
+        territory = territory
+    }
+end
+
+-- ============================================================
+-- ORG DATA — fetch full panel payload (extended)
 -- ============================================================
 
 RegisterNetEvent('underworld:server:getOrgData', function()
-    local src = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -72,7 +144,6 @@ RegisterNetEvent('underworld:server:getOrgData', function()
         return
     end
 
-    -- Generate today's missions if not yet done
     TriggerEvent('underworld:internal:generateMissions', org.id)
 
     local members = MySQL.query.await(
@@ -86,19 +157,57 @@ RegisterNetEvent('underworld:server:getOrgData', function()
         { org.id }
     )
 
-    local today = os.date('%Y-%m-%d')
+    local today    = os.date('%Y-%m-%d')
     local missions = MySQL.query.await(
         'SELECT * FROM uw_daily_missions WHERE org_id = ? AND DATE(created_at) = ? ORDER BY status ASC',
         { org.id, today }
     )
 
+    -- Influence data for this org
+    local influence = GetOrgInfluenceData(org.id)
+
+    -- XP progress
+    local nextLevelXp = XpForNextLevel(org.level or 1)
+
+    -- Per-player cooldown
+    local myCooldownEnds = 0
+    if MissionCooldowns and MissionCooldowns[citizenId] then
+        myCooldownEnds = MissionCooldowns[citizenId]
+    end
+
+    -- Heat label
+    local heat = org.heat or 0
+    local heatLabel
+    if heat >= 91 then     heatLabel = 'burned'
+    elseif heat >= 61 then heatLabel = 'hot'
+    elseif heat >= 31 then heatLabel = 'elevated'
+    else                   heatLabel = 'normal' end
+
+    -- Leaderboard (build async to not block)
+    local leaderboard = BuildLeaderboard()
+
     TriggerClientEvent('underworld:client:openPanel', src, {
-        org         = org,
-        members     = members,
-        ledger      = ledger,
-        missions    = missions,
-        myRank      = org.rank,
-        myCitizenId = citizenId
+        org = {
+            id          = org.id,
+            name        = org.name,
+            label       = org.label,
+            type        = org.type,
+            tier        = org.tier,
+            vault       = org.vault,
+            heat        = heat,
+            heatLabel   = heatLabel,
+            xp          = org.xp or 0,
+            level       = org.level or 1,
+            nextLevelXp = nextLevelXp
+        },
+        members          = members,
+        ledger           = ledger,
+        missions         = missions,
+        influence        = influence,
+        leaderboard      = leaderboard,
+        myRank           = org.rank,
+        myCitizenId      = citizenId,
+        myCooldownEnds   = myCooldownEnds
     })
 end)
 
@@ -107,7 +216,7 @@ end)
 -- ============================================================
 
 RegisterNetEvent('underworld:server:deposit', function(amount)
-    local src     = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -137,7 +246,7 @@ RegisterNetEvent('underworld:server:deposit', function(amount)
 end)
 
 RegisterNetEvent('underworld:server:withdraw', function(amount)
-    local src     = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -146,6 +255,15 @@ RegisterNetEvent('underworld:server:withdraw', function(amount)
 
     local org = GetPlayerOrg(citizenId)
     if not org then return end
+
+    -- Block withdrawals if org is burned (heat 91+)
+    if (org.heat or 0) >= 91 then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = 'Vault locked — heat too high. Lay low until heat drops.'
+        })
+        return
+    end
 
     local rankData = Config.Ranks[org.rank]
     if not rankData or not rankData.canWithdraw then
@@ -162,7 +280,7 @@ RegisterNetEvent('underworld:server:withdraw', function(amount)
         local remaining = math.max(0, rankData.dailyWithdraw - todayWithdrawn)
         TriggerClientEvent('ox_lib:notify', src, {
             type = 'error',
-            description = ('Daily limit: $%s. Remaining today: $%s.'):format(rankData.dailyWithdraw, remaining)
+            description = ('Daily limit: $%s. Remaining: $%s.'):format(rankData.dailyWithdraw, remaining)
         })
         return
     end
@@ -182,15 +300,15 @@ RegisterNetEvent('underworld:server:withdraw', function(amount)
     )
     Player.Functions.AddMoney('cash', amount, 'underworld-withdraw')
     AddLedger(org.id, citizenId, 'withdrawal', -amount, 'Vault withdrawal')
-    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = ('Withdrew $%s from the vault.'):format(amount) })
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = ('Withdrew $%s.'):format(amount) })
 end)
 
 -- ============================================================
--- MEMBERSHIP — invite / accept / kick / rank / salary
+-- MEMBERSHIP — invite / accept / kick / rank / salary / leave
 -- ============================================================
 
 RegisterNetEvent('underworld:server:invitePlayer', function(targetSrc)
-    local src     = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -207,7 +325,7 @@ RegisterNetEvent('underworld:server:invitePlayer', function(targetSrc)
     if memberCount >= tier.maxMembers then
         TriggerClientEvent('ox_lib:notify', src, {
             type = 'error',
-            description = ('Member cap reached (%s). Upgrade your office tier.'):format(tier.maxMembers)
+            description = ('Member cap reached (%s/%s).'):format(memberCount, tier.maxMembers)
         })
         return
     end
@@ -225,14 +343,14 @@ RegisterNetEvent('underworld:server:invitePlayer', function(targetSrc)
     end
 
     TriggerClientEvent('underworld:client:orgInvite', tonumber(targetSrc), {
-        orgId      = org.id,
-        orgName    = org.label,
+        orgId       = org.id,
+        orgName     = org.label,
         inviterName = GetPlayerName(src)
     })
 end)
 
 RegisterNetEvent('underworld:server:acceptInvite', function(orgId)
-    local src     = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -256,11 +374,14 @@ RegisterNetEvent('underworld:server:acceptInvite', function(orgId)
         'INSERT INTO uw_members (org_id, citizen_id, name, rank) VALUES (?, ?, ?, 1)',
         { org.id, citizenId, GetPlayerName(src) }
     )
+
+    -- Grant XP for new member
+    GrantOrgXP(org.id, Config.XPGains.new_member, 'new_member')
+
     TriggerClientEvent('ox_lib:notify', src, {
         type = 'success',
         description = ('Welcome to %s. You start as Associé.'):format(org.label)
     })
-
     NotifyOrg(org.id, {
         type = 'inform',
         description = ('[ORG] %s has joined as Associé.'):format(GetPlayerName(src))
@@ -268,7 +389,7 @@ RegisterNetEvent('underworld:server:acceptInvite', function(orgId)
 end)
 
 RegisterNetEvent('underworld:server:kickMember', function(targetCitizenId)
-    local src     = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -285,7 +406,7 @@ RegisterNetEvent('underworld:server:kickMember', function(targetCitizenId)
     if not target then return end
 
     if target.rank >= org.rank then
-        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Cannot kick someone of equal or higher rank.' })
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Cannot kick equal or higher rank.' })
         return
     end
 
@@ -302,7 +423,7 @@ RegisterNetEvent('underworld:server:kickMember', function(targetCitizenId)
 end)
 
 RegisterNetEvent('underworld:server:setRank', function(targetCitizenId, newRank)
-    local src     = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -331,7 +452,7 @@ RegisterNetEvent('underworld:server:setRank', function(targetCitizenId, newRank)
 end)
 
 RegisterNetEvent('underworld:server:setSalary', function(targetCitizenId, salary)
-    local src     = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -350,7 +471,7 @@ RegisterNetEvent('underworld:server:setSalary', function(targetCitizenId, salary
 end)
 
 RegisterNetEvent('underworld:server:leaveOrg', function()
-    local src     = source
+    local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
 
@@ -370,7 +491,47 @@ RegisterNetEvent('underworld:server:leaveOrg', function()
 end)
 
 -- ============================================================
--- ADMIN COMMAND — create org
+-- STASH ACCESS — opens ox_inventory stash for org member
+-- ============================================================
+
+RegisterNetEvent('underworld:server:openStash', function()
+    local src       = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'You are not in an organization.' })
+        return
+    end
+
+    if org.rank < 2 then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = 'You need to be at least Soldat to access the stash.'
+        })
+        return
+    end
+
+    -- Check stash is registered (might need registration if ox_inventory was restarted)
+    if GetResourceState('ox_inventory') == 'started' then
+        local slots  = GetStashSlots(org.tier, org.level or 1)
+        local weight = GetStashWeight(org.tier)
+        exports.ox_inventory:RegisterStash(
+            ('uw_stash_%d'):format(org.id),
+            ('%s — Org Stash'):format(org.label),
+            slots,
+            weight
+        )
+    end
+
+    TriggerClientEvent('underworld:client:openStash', src, {
+        stashId = ('uw_stash_%d'):format(org.id)
+    })
+end)
+
+-- ============================================================
+-- ADMIN COMMANDS
 -- ============================================================
 
 RegisterCommand('uwcreateorg', function(source, args)
@@ -381,7 +542,6 @@ RegisterCommand('uwcreateorg', function(source, args)
         return
     end
 
-    -- Usage: /uwcreateorg <name> <type> <tier> <label...>
     local name    = args[1]
     local orgType = args[2]
     local tier    = tonumber(args[3]) or 1
@@ -397,14 +557,24 @@ RegisterCommand('uwcreateorg', function(source, args)
         return
     end
 
-    MySQL.insert.await(
-        'INSERT INTO uw_organizations (name, label, type, tier) VALUES (?, ?, ?, ?)',
+    local orgId = MySQL.insert.await(
+        'INSERT INTO uw_organizations (name, label, type, tier, xp, level) VALUES (?, ?, ?, ?, 0, 1)',
         { name, label, orgType, tier }
     )
-    print(('[UNDERWORLD] Created org "%s" (%s) at tier %s.'):format(label, orgType, tier))
+
+    if orgId and GetResourceState('ox_inventory') == 'started' then
+        local slots  = GetStashSlots(tier, 1)
+        local weight = GetStashWeight(tier)
+        exports.ox_inventory:RegisterStash(
+            ('uw_stash_%d'):format(orgId),
+            ('%s — Org Stash'):format(label),
+            slots, weight
+        )
+    end
+
+    print(('[UNDERWORLD] Created org "%s" (type: %s, tier: %s, id: %s)'):format(label, orgType, tier, orgId))
 end, true)
 
--- Admin: set a player as Direktör of their org
 RegisterCommand('uwsetdirektor', function(source, args)
     if source ~= 0 and not IsPlayerAceAllowed(tostring(source), 'command.uwcreateorg') then return end
 

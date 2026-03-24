@@ -1,8 +1,39 @@
 -- ============================================================
--- UNDERWORLD — Server: Missions
+-- UNDERWORLD — Server: Missions (v2)
+-- New: mission cooldowns, XP grants, zone assignment, influence
 -- ============================================================
 
--- Generate today's mission board for an org (idempotent)
+-- Per-member cooldown table (resets on server restart — by design)
+local MissionCooldowns = {}  -- [citizenId] = unix timestamp when cooldown expires
+
+-- ============================================================
+-- HELPERS
+-- ============================================================
+
+local function GetCooldownRemaining(citizenId)
+    local expires = MissionCooldowns[citizenId]
+    if not expires then return 0 end
+    local remaining = expires - os.time()
+    return math.max(0, remaining)
+end
+
+-- Find which zone a coordinate falls in (returns zone_id or nil)
+local function GetZoneForCoord(coordTable)
+    if not coordTable then return nil end
+    local pos = vec3(coordTable.x, coordTable.y, coordTable.z)
+    for _, zone in ipairs(Config.InfluenceZones) do
+        local dist = #(pos - vec3(zone.coords.x, zone.coords.y, zone.coords.z))
+        if dist <= zone.radius then
+            return zone.id
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+-- GENERATE DAILY MISSIONS (idempotent)
+-- ============================================================
+
 local function GenerateDailyMissions(orgId)
     local org = MySQL.single.await('SELECT * FROM uw_organizations WHERE id = ?', { orgId })
     if not org then return end
@@ -23,38 +54,59 @@ local function GenerateDailyMissions(orgId)
     local expiresAt = today .. ' 23:59:59'
     local mTypes    = orgType.missions
 
+    -- Level 2+ orgs can access higher-tier missions from the pool
+    if (org.level or 1) >= 2 then
+        local allMissions = {}
+        for k, _ in pairs(Config.Missions) do allMissions[#allMissions + 1] = k end
+        -- Mix: 50% org-type missions, 50% general pool
+        if math.random() > 0.5 then mTypes = allMissions end
+    end
+
     for _ = 1, toCreate do
         local mType   = mTypes[math.random(1, #mTypes)]
         local mConfig = Config.Missions[mType]
+        if not mConfig then goto continue end
 
         local pickupIdx   = math.random(1, #Config.MissionLocations.pickups)
         local deliveryIdx = math.random(1, #Config.MissionLocations.deliveries)
-        -- Ensure pickup ≠ delivery index
         while deliveryIdx == pickupIdx do
             deliveryIdx = math.random(1, #Config.MissionLocations.deliveries)
         end
 
-        local base   = math.random(tier.missionReward.min, tier.missionReward.max)
-        local reward = math.floor(base * mConfig.rewardMult * orgType.incomeMult)
-
         local pickup   = Config.MissionLocations.pickups[pickupIdx]
         local delivery = Config.MissionLocations.deliveries[deliveryIdx]
 
+        -- Determine zone from pickup location
+        local zoneId = GetZoneForCoord({ x = pickup.x, y = pickup.y, z = pickup.z })
+
+        local base   = math.random(tier.missionReward.min, tier.missionReward.max)
+        local reward = math.floor(base * mConfig.rewardMult * orgType.incomeMult)
+
         MySQL.insert.await(
-            'INSERT INTO uw_daily_missions (org_id, mission_type, reward, pickup_coords, delivery_coords, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT INTO uw_daily_missions (org_id, mission_type, reward, pickup_coords, delivery_coords, zone_id, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
             {
                 orgId, mType, reward,
                 json.encode({ x = pickup.x,   y = pickup.y,   z = pickup.z }),
                 json.encode({ x = delivery.x, y = delivery.y, z = delivery.z }),
+                zoneId,
                 expiresAt
             }
         )
+
+        ::continue::
     end
 end
 
--- Internal event so main.lua can call it
 AddEventHandler('underworld:internal:generateMissions', function(orgId)
     GenerateDailyMissions(orgId)
+end)
+
+-- ============================================================
+-- GET COOLDOWN — called from getOrgData so UI can show timer
+-- ============================================================
+
+AddEventHandler('underworld:internal:getCooldown', function(citizenId, cb)
+    cb(GetCooldownRemaining(citizenId))
 end)
 
 -- ============================================================
@@ -69,7 +121,16 @@ RegisterNetEvent('underworld:server:startMission', function(missionId)
     local org = GetPlayerOrg(citizenId)
     if not org then return end
 
-    local mConfig_ = nil -- will fetch after validating
+    -- Check per-member cooldown
+    local cooldownLeft = GetCooldownRemaining(citizenId)
+    if cooldownLeft > 0 then
+        local mins = math.ceil(cooldownLeft / 60)
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = ('On cooldown. Next mission in %d min.'):format(mins)
+        })
+        return
+    end
 
     local mission = MySQL.single.await(
         'SELECT * FROM uw_daily_missions WHERE id = ? AND org_id = ? AND status = "pending"',
@@ -119,7 +180,8 @@ RegisterNetEvent('underworld:server:startMission', function(missionId)
         reward      = mission.reward,
         skillCheck  = mConfig.skillCheck,
         pickup      = pickup,
-        delivery    = delivery
+        delivery    = delivery,
+        zoneId      = mission.zone_id
     })
 
     TriggerClientEvent('ox_lib:notify', src, {
@@ -129,7 +191,7 @@ RegisterNetEvent('underworld:server:startMission', function(missionId)
 end)
 
 -- ============================================================
--- PICKUP CONFIRMED (server validates proximity via client signal)
+-- PICKUP CONFIRMED
 -- ============================================================
 
 RegisterNetEvent('underworld:server:missionPickup', function(missionId)
@@ -148,7 +210,10 @@ RegisterNetEvent('underworld:server:missionPickup', function(missionId)
         missionId = missionId,
         delivery  = delivery
     })
-    TriggerClientEvent('ox_lib:notify', src, { type = 'inform', description = 'Package secured. Get to the drop point.' })
+    TriggerClientEvent('ox_lib:notify', src, {
+        type = 'inform',
+        description = 'Package secured. Get to the drop point.'
+    })
 end)
 
 -- ============================================================
@@ -174,23 +239,52 @@ RegisterNetEvent('underworld:server:completeMission', function(missionId)
         { missionId }
     )
 
-    -- Reward goes to vault, contribution logged
-    MySQL.update.await('UPDATE uw_organizations SET vault = vault + ? WHERE id = ?', { mission.reward, org.id })
+    -- Apply zone influence bonus to reward (if org owns the zone)
+    local zoneMult = GetZoneRewardMult(org.id, mission.zone_id)
+    local finalReward = math.floor(mission.reward * zoneMult)
+
+    -- Apply heat penalty to org (illegal/family orgs only)
+    local mConfig   = Config.Missions[mission.mission_type]
+    local heatGain  = (mConfig and mConfig.heatGain or 0)
+    local heatMult  = Config.OrgTypes[org.type] and Config.OrgTypes[org.type].heatMult or 0
+    local heatDelta = math.floor(heatGain * heatMult)
+
+    if heatDelta > 0 then
+        MySQL.update.await(
+            'UPDATE uw_organizations SET heat = LEAST(100, heat + ?) WHERE id = ?',
+            { heatDelta, org.id }
+        )
+    end
+
+    -- Reward vault + contributions
+    MySQL.update.await('UPDATE uw_organizations SET vault = vault + ? WHERE id = ?', { finalReward, org.id })
     MySQL.update.await(
         'UPDATE uw_members SET weekly_contribution = weekly_contribution + ?, total_contribution = total_contribution + ? WHERE citizen_id = ? AND org_id = ?',
-        { mission.reward, mission.reward, citizenId, org.id }
+        { finalReward, finalReward, citizenId, org.id }
     )
 
-    local mLabel = Config.Missions[mission.mission_type] and Config.Missions[mission.mission_type].label or mission.mission_type
-    AddLedger(org.id, citizenId, 'mission_reward', mission.reward, ('Mission: %s'):format(mLabel))
+    local mLabel = mConfig and mConfig.label or mission.mission_type
+    local desc   = ('Mission: %s'):format(mLabel)
+    if zoneMult > 1.0 then desc = desc .. ' [+Zone Bonus]' end
+    AddLedger(org.id, citizenId, 'mission_reward', finalReward, desc)
+
+    -- Grant XP to org
+    GrantOrgXP(org.id, Config.XPGains.mission_complete, 'mission_complete')
+
+    -- Update influence zone
+    ApplyMissionInfluence(org.id, mission.zone_id)
+
+    -- Set per-member cooldown
+    local cooldownSecs = GetMissionCooldownSeconds(org.tier, org.level or 1)
+    MissionCooldowns[citizenId] = os.time() + cooldownSecs
 
     TriggerClientEvent('ox_lib:notify', src, {
         type = 'success',
-        description = ('[MISSION COMPLETE] +$%s added to the vault.'):format(mission.reward)
+        description = ('[MISSION COMPLETE] +$%s to vault.'):format(finalReward)
     })
     TriggerClientEvent('underworld:client:missionComplete', src, missionId)
 
-    -- Notify other online org members
+    -- Notify org members
     local members = MySQL.query.await('SELECT citizen_id FROM uw_members WHERE org_id = ?', { org.id })
     for _, m in ipairs(members) do
         if m.citizen_id ~= citizenId then
@@ -198,13 +292,13 @@ RegisterNetEvent('underworld:server:completeMission', function(missionId)
             if tSrc then
                 TriggerClientEvent('ox_lib:notify', tSrc, {
                     type = 'inform',
-                    description = ('[ORG] %s completed a mission. +$%s to vault.'):format(GetPlayerName(src), mission.reward)
+                    description = ('[ORG] %s completed a mission. +$%s to vault.'):format(GetPlayerName(src), finalReward)
                 })
             end
         end
     end
 
-    -- Check if daily target just hit — celebrate
+    -- Daily target reached?
     local today     = os.date('%Y-%m-%d')
     local completed = MySQL.scalar.await(
         'SELECT COUNT(*) FROM uw_daily_missions WHERE org_id = ? AND status = "completed" AND DATE(completed_at) = ?',
@@ -215,7 +309,7 @@ RegisterNetEvent('underworld:server:completeMission', function(missionId)
     if completed == required then
         NotifyOrg(org.id, {
             type = 'success',
-            description = ('[ORG] Daily mission target reached! Passive income is now at full rate.')
+            description = '[ORG] Daily mission target reached! Passive income now at full rate.'
         })
     end
 end)
@@ -239,3 +333,8 @@ RegisterNetEvent('underworld:server:failMission', function(missionId)
     TriggerClientEvent('underworld:client:missionFailed', src, missionId)
     TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = '[MISSION FAILED]' })
 end)
+
+-- ============================================================
+-- EXPOSE COOLDOWN TABLE for getOrgData
+-- ============================================================
+_ENV.MissionCooldowns = MissionCooldowns

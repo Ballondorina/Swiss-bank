@@ -1,5 +1,6 @@
 -- ============================================================
--- UNDERWORLD — Client: Main
+-- UNDERWORLD — Client: Main (v2)
+-- New: stash access, creation NUI callbacks, extended panel
 -- ============================================================
 
 -- ============================================================
@@ -16,16 +17,28 @@ RegisterNetEvent('underworld:client:openPanel', function(data)
 end)
 
 -- ============================================================
+-- STASH OPEN
+-- ============================================================
+
+RegisterNetEvent('underworld:client:openStash', function(data)
+    if GetResourceState('ox_inventory') ~= 'started' then
+        lib.notify({ type = 'error', description = 'Inventory system not available.' })
+        return
+    end
+    exports.ox_inventory:openInventory('stash', data.stashId)
+end)
+
+-- ============================================================
 -- INVITE
 -- ============================================================
 
 RegisterNetEvent('underworld:client:orgInvite', function(data)
     CreateThread(function()
         local alert = lib.alertDialog({
-            header  = 'Organization Invite',
-            content = ('**%s** has invited you to join **%s**.\n\nAccept?'):format(data.inviterName, data.orgName),
+            header   = 'Organization Invite',
+            content  = ('**%s** has invited you to join **%s**.\n\nAccept?'):format(data.inviterName, data.orgName),
             centered = true,
-            cancel  = true
+            cancel   = true
         })
         if alert == 'confirm' then
             TriggerServerEvent('underworld:server:acceptInvite', data.orgId)
@@ -73,6 +86,12 @@ RegisterNUICallback('startMission', function(data, cb)
     cb({})
 end)
 
+RegisterNUICallback('openStash', function(_, cb)
+    SetNuiFocus(false, false)
+    TriggerServerEvent('underworld:server:openStash')
+    cb({})
+end)
+
 RegisterNUICallback('leaveOrg', function(_, cb)
     SetNuiFocus(false, false)
     TriggerServerEvent('underworld:server:leaveOrg')
@@ -100,17 +119,25 @@ CreateThread(function()
             debug   = false,
             options = {
                 {
-                    name    = 'uw_office_' .. i,
-                    label   = loc.label .. ' — Terminal',
-                    icon    = 'fa-solid fa-building',
+                    name     = 'uw_office_panel_' .. i,
+                    label    = loc.label .. ' — Terminal',
+                    icon     = 'fa-solid fa-building',
                     onSelect = function()
                         TriggerServerEvent('underworld:server:getOrgData')
+                    end
+                },
+                {
+                    name     = 'uw_office_stash_' .. i,
+                    label    = loc.label .. ' — Org Stash',
+                    icon     = 'fa-solid fa-box-archive',
+                    onSelect = function()
+                        TriggerServerEvent('underworld:server:openStash')
                     end
                 }
             }
         })
 
-        -- Spawn a blip for each office
+        -- Blip
         local blip = AddBlipForCoord(loc.coords.x, loc.coords.y, loc.coords.z)
         SetBlipSprite(blip, 475)
         SetBlipColour(blip, 4)
