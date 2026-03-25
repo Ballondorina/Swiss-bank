@@ -297,6 +297,126 @@ Config.CreationNPC = {
 }
 
 -- ============================================================
+-- DRUG LAB SYSTEM (Grand RP-style)
+-- Illegal and Family orgs can own labs that passively produce
+-- product which members collect and sell at sell points.
+-- ============================================================
+
+Config.DrugLabs = {
+    -- Which org types can own labs
+    allowedTypes = { 'illegal', 'family' },
+
+    -- Max labs one org can own simultaneously
+    maxLabsPerOrg = 2,
+
+    -- Cost to purchase/register a lab (from vault)
+    labCost = 750000,
+
+    -- Lab types and their economics
+    types = {
+        cocaine = {
+            label          = 'Cocaine Lab',
+            color          = '#e8d5b7',
+            icon           = '◈',
+            unitsPerHour   = 3,        -- units produced per hour
+            maxStock       = 60,       -- max units before lab is full
+            sellPricePerUnit = 9000,   -- $ per unit when sold
+            heatGainOnSell = 6,
+        },
+        meth = {
+            label          = 'Meth Lab',
+            color          = '#88c0d0',
+            icon           = '◎',
+            unitsPerHour   = 4,
+            maxStock       = 50,
+            sellPricePerUnit = 12000,
+            heatGainOnSell = 10,
+        },
+        counterfeit = {
+            label          = 'Counterfeit Money',
+            color          = '#a3be8c',
+            icon           = '◇',
+            unitsPerHour   = 2,
+            maxStock       = 100,
+            sellPricePerUnit = 5500,
+            heatGainOnSell = 4,
+        }
+    },
+
+    -- Physical lab locations in the world
+    locations = {
+        { id = 1, label = 'Strawberry Lab',    coords = vector3(-333.9,  -1597.4, 31.0),   type = 'cocaine'     },
+        { id = 2, label = 'Davis Warehouse',   coords = vector3(80.7,    -1951.9, 21.1),   type = 'meth'        },
+        { id = 3, label = 'Cypress Flats Lab', coords = vector3(1010.5,  -2007.5, 29.6),   type = 'cocaine'     },
+        { id = 4, label = 'Sandy Lab',         coords = vector3(1719.5,  3823.4,  34.2),   type = 'meth'        },
+        { id = 5, label = 'Paleto Lab',        coords = vector3(-344.6,  6316.0,  32.5),   type = 'counterfeit' },
+        { id = 6, label = 'Rockford Print',    coords = vector3(-893.1,  -223.6,  37.9),   type = 'counterfeit' },
+    },
+
+    -- Sell points (where members deliver stock for vault cash)
+    sellPoints = {
+        { id = 1, label = 'LS Port Deal',      coords = vector3(686.6,  -2534.0, 7.2)  },
+        { id = 2, label = 'Sandy Shores Deal', coords = vector3(2032.0,  3124.0, 48.0) },
+        { id = 3, label = 'Vespucci Deal',     coords = vector3(-1380.7, -626.7, 30.5) },
+        { id = 4, label = 'Vinewood Deal',     coords = vector3(-630.2,   266.4, 83.4) },
+    },
+
+    -- Heat threshold above which labs have raid risk each hour
+    raidHeatThreshold = 60,
+    -- Chance per passive tick that a hot org's lab gets raided (0.0 - 1.0)
+    raidChancePerTick = 0.12,
+}
+
+-- ============================================================
+-- STORE ROBBERY SYSTEM (Grand RP-style — ~$250K/hr per org)
+-- ============================================================
+
+Config.StoreRobbery = {
+    -- Orgs must be at least this tier to do store robberies
+    minTier       = 1,
+    -- Which org types can rob stores
+    allowedTypes  = { 'illegal', 'family' },
+    -- Per-org cooldown between robberies (seconds)
+    cooldownSecs  = 3600,  -- 1 hour
+    -- Payout range (goes to org vault)
+    payoutMin     = 180000,
+    payoutMax     = 280000,
+    -- Heat gained on successful robbery
+    heatGain      = 15,
+    -- Min rank required to trigger robbery
+    minRank       = 2,
+
+    -- Store locations
+    stores = {
+        { id = 1, label = '24/7 — Strawberry',  coords = vector3(-706.1, -913.0,  19.2) },
+        { id = 2, label = '24/7 — La Mesa',     coords = vector3(817.6,  -775.9,  26.4) },
+        { id = 3, label = 'Liquor Mart',        coords = vector3(1164.3, -323.3,  69.2) },
+        { id = 4, label = '24/7 — Paleto',      coords = vector3(-60.1,  6249.4,  31.1) },
+        { id = 5, label = 'Rob\'s Liquor',      coords = vector3(-1224.5, -908.5, 12.0) },
+        { id = 6, label = '24/7 — Sandy',       coords = vector3(1736.0, 3709.1,  33.5) },
+    }
+}
+
+-- ============================================================
+-- SCHEDULED TERRITORY WAR WINDOWS (Grand RP-style)
+-- Territory capture events only active during these windows.
+-- Outside these windows, influence gain from presence is blocked.
+-- ============================================================
+
+Config.TerritoryWarWindows = {
+    enabled = true,
+    -- Days: 1=Monday, 2=Tuesday ... 7=Sunday
+    activeDays = { 1, 3, 5, 7 },  -- Mon, Wed, Fri, Sun
+    -- Hour range (24h, server local time)
+    startHour  = 16,   -- 4:00 PM
+    endHour    = 23,   -- 11:00 PM
+    -- Score multiplier for captures during war window
+    warWindowBonus = 3,
+    -- Notification sent to all online org members when window opens
+    notifyOnOpen = true,
+}
+
+-- ============================================================
 -- LEADERBOARD
 -- ============================================================
 Config.LeaderboardRewards = {

@@ -88,6 +88,69 @@ local function ApplyMissionInfluence(orgId, zoneId)
 end
 
 -- ============================================================
+-- TERRITORY WAR WINDOW CHECK
+-- ============================================================
+
+local function IsWarWindowActive()
+    if not Config.TerritoryWarWindows or not Config.TerritoryWarWindows.enabled then
+        return true  -- if not configured, always active
+    end
+    local dayOfWeek = tonumber(os.date('%u'))  -- 1=Monday
+    local hour      = tonumber(os.date('%H'))  -- 0-23
+
+    local dayAllowed = false
+    for _, d in ipairs(Config.TerritoryWarWindows.activeDays) do
+        if d == dayOfWeek then dayAllowed = true; break end
+    end
+    if not dayAllowed then return false end
+
+    return hour >= Config.TerritoryWarWindows.startHour and hour < Config.TerritoryWarWindows.endHour
+end
+
+local warWindowWasActive = false
+local warWindowThread = CreateThread(function()
+    while true do
+        Wait(60 * 1000)  -- check every minute
+        local isActive = IsWarWindowActive()
+        if isActive and not warWindowWasActive and Config.TerritoryWarWindows.notifyOnOpen then
+            -- Window just opened — notify all online org members
+            local orgs = MySQL.query.await('SELECT id FROM uw_organizations') or {}
+            for _, o in ipairs(orgs) do
+                NotifyOrg(o.id, {
+                    type = 'success',
+                    description = '[TERRITORY] War window is now open! Capture zones until ' ..
+                        Config.TerritoryWarWindows.endHour .. ':00.'
+                })
+            end
+        end
+        warWindowWasActive = isActive
+    end
+end)
+
+-- Expose for UI
+function GetWarWindowStatus()
+    if not Config.TerritoryWarWindows or not Config.TerritoryWarWindows.enabled then
+        return { enabled = false, active = true }
+    end
+    local active = IsWarWindowActive()
+    local hour   = tonumber(os.date('%H'))
+    local nextStart = nil
+    if not active then
+        -- Calculate hours until next window
+        local hoursUntil = (Config.TerritoryWarWindows.startHour - hour + 24) % 24
+        nextStart = hoursUntil
+    end
+    return {
+        enabled    = true,
+        active     = active,
+        startHour  = Config.TerritoryWarWindows.startHour,
+        endHour    = Config.TerritoryWarWindows.endHour,
+        activeDays = Config.TerritoryWarWindows.activeDays,
+        nextStart  = nextStart,
+    }
+end
+
+-- ============================================================
 -- APPLY PRESENCE GAIN — player is in zone (called from client)
 -- Rate-limited via server-side cooldown table
 -- ============================================================
@@ -105,6 +168,9 @@ RegisterNetEvent('underworld:server:zonePresence', function(zoneId)
     -- Require level 4+ for influence zones to be active
     if (org.level or 1) < 4 then return end
 
+    -- Territory war window check — presence gains only during war window
+    if not IsWarWindowActive() then return end
+
     local key     = citizenId .. zoneId
     local now     = os.time()
     local lastTs  = PresenceCooldowns[key] or 0
@@ -113,8 +179,14 @@ RegisterNetEvent('underworld:server:zonePresence', function(zoneId)
     if (now - lastTs) < 60 then return end
     PresenceCooldowns[key] = now
 
+    -- War window bonus multiplier
+    local gain = Config.InfluencePresenceGain
+    if Config.TerritoryWarWindows and Config.TerritoryWarWindows.warWindowBonus then
+        gain = gain * Config.TerritoryWarWindows.warWindowBonus
+    end
+
     local current = GetInfluence(org.id, zoneId)
-    SetInfluence(org.id, zoneId, current + Config.InfluencePresenceGain)
+    SetInfluence(org.id, zoneId, current + gain)
 end)
 
 -- ============================================================

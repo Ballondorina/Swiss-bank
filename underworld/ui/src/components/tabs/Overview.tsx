@@ -1,11 +1,11 @@
 // ============================================================
-// UNDERWORLD — Overview Tab
+// UNDERWORLD — Overview Tab (v3)
 // ============================================================
 
 import { useOrgStore } from '../../store/orgStore'
 import { StatCard } from '../ui/StatCard'
 import { ProgressBar } from '../ui/ProgressBar'
-import { formatMoney, xpPercent } from '../../lib/utils'
+import { formatMoney, xpPercent, formatDateTime } from '../../lib/utils'
 import { RANK_NAMES, TIER_NAMES, HEAT_COLORS } from '../../types/org'
 
 const LEVEL_THRESHOLDS: Record<number, number> = {
@@ -27,7 +27,7 @@ export function Overview() {
   const data = useOrgStore(s => s.data)
   if (!data) return null
 
-  const { org, members, missions } = data
+  const { org, members, missions, announcements, diplomacy } = data
   const tier    = { 1: { req: 3, max: 50000 }, 2: { req: 5, max: 200000 }, 3: { req: 8, max: 500000 }, 4: { req: 12, max: 1000000 } }[org.tier] ?? { req: 3, max: 50000 }
   const completed  = missions.filter(m => m.status === 'completed').length
   const ratio      = Math.min(completed / tier.req, 1.0)
@@ -42,11 +42,28 @@ export function Overview() {
 
   const heatColor = HEAT_COLORS[org.heatLabel]
 
-  const myMember = members.find(m => m.citizen_id === data.myCitizenId)
   const myRankName = RANK_NAMES[data.myRank] ?? 'Unknown'
+
+  // Pinned announcement
+  const pinned = announcements?.find(a => a.pinned)
+
+  // Active wars/alliances count
+  const activeWars = diplomacy?.wars?.filter(w => w.status === 'active').length ?? 0
+  const activeAlliances = diplomacy?.alliances?.filter(a => a.status === 'active').length ?? 0
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Pinned announcement banner */}
+      {pinned && (
+        <div className="bg-accent/10 border border-accent/30 rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="text-accent text-sm mt-0.5">PIN</span>
+          <div className="flex-1">
+            <p className="text-sm text-zinc-200">{pinned.content}</p>
+            <p className="text-xs text-zinc-500 mt-1">— {pinned.author_name}, {formatDateTime(pinned.created_at)}</p>
+          </div>
+        </div>
+      )}
+
       {/* Stats grid */}
       <div className="grid grid-cols-4 gap-3">
         <StatCard
@@ -77,6 +94,30 @@ export function Overview() {
           icon="◇"
         />
       </div>
+
+      {/* Diplomacy summary (if any active) */}
+      {(activeWars > 0 || activeAlliances > 0) && (
+        <div className="grid grid-cols-2 gap-3">
+          {activeWars > 0 && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-red-400">Active War{activeWars > 1 ? 's' : ''}</div>
+                <div className="text-xs text-zinc-500">Check Settings tab for details</div>
+              </div>
+              <span className="text-lg font-bold text-red-400">{activeWars}</span>
+            </div>
+          )}
+          {activeAlliances > 0 && (
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-blue-400">Active Alliance{activeAlliances > 1 ? 's' : ''}</div>
+                <div className="text-xs text-zinc-500">Shared territorial advantage</div>
+              </div>
+              <span className="text-lg font-bold text-blue-400">{activeAlliances}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* XP / Level progress */}
       <div className="bg-surface-2 border border-white/5 rounded-xl p-4 flex flex-col gap-3">

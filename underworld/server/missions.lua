@@ -191,10 +191,12 @@ RegisterNetEvent('underworld:server:startMission', function(missionId)
 end)
 
 -- ============================================================
--- PICKUP CONFIRMED
+-- PICKUP CONFIRMED (with proximity validation)
 -- ============================================================
 
-RegisterNetEvent('underworld:server:missionPickup', function(missionId)
+local MISSION_INTERACT_DISTANCE = 15.0  -- max distance in game units (generous to avoid false negatives)
+
+RegisterNetEvent('underworld:server:missionPickup', function(missionId, playerCoords)
     local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
@@ -204,6 +206,20 @@ RegisterNetEvent('underworld:server:missionPickup', function(missionId)
         { missionId, citizenId }
     )
     if not mission then return end
+
+    -- Server-side proximity validation
+    local pickup = json.decode(mission.pickup_coords)
+    if playerCoords and pickup then
+        local dx = (playerCoords.x or 0) - pickup.x
+        local dy = (playerCoords.y or 0) - pickup.y
+        local dz = (playerCoords.z or 0) - pickup.z
+        local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+        if dist > MISSION_INTERACT_DISTANCE then
+            TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Too far from the pickup point.' })
+            print(('[UNDERWORLD] [ANTICHEAT] %s attempted mission pickup from %.1f units away (max: %.1f)'):format(citizenId, dist, MISSION_INTERACT_DISTANCE))
+            return
+        end
+    end
 
     local delivery = json.decode(mission.delivery_coords)
     TriggerClientEvent('underworld:client:missionPickupDone', src, {
@@ -220,7 +236,7 @@ end)
 -- COMPLETE MISSION
 -- ============================================================
 
-RegisterNetEvent('underworld:server:completeMission', function(missionId)
+RegisterNetEvent('underworld:server:completeMission', function(missionId, playerCoords)
     local src       = source
     local citizenId = GetCitizenId(src)
     if not citizenId then return end
@@ -233,6 +249,20 @@ RegisterNetEvent('underworld:server:completeMission', function(missionId)
         { missionId, citizenId }
     )
     if not mission then return end
+
+    -- Server-side proximity validation for delivery
+    local delivery = json.decode(mission.delivery_coords)
+    if playerCoords and delivery then
+        local dx = (playerCoords.x or 0) - delivery.x
+        local dy = (playerCoords.y or 0) - delivery.y
+        local dz = (playerCoords.z or 0) - delivery.z
+        local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+        if dist > MISSION_INTERACT_DISTANCE then
+            TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Too far from the delivery point.' })
+            print(('[UNDERWORLD] [ANTICHEAT] %s attempted mission delivery from %.1f units away (max: %.1f)'):format(citizenId, dist, MISSION_INTERACT_DISTANCE))
+            return
+        end
+    end
 
     MySQL.update.await(
         'UPDATE uw_daily_missions SET status = "completed", completed_at = NOW() WHERE id = ?',
@@ -274,9 +304,14 @@ RegisterNetEvent('underworld:server:completeMission', function(missionId)
     -- Update influence zone
     ApplyMissionInfluence(org.id, mission.zone_id)
 
-    -- Set per-member cooldown
+    -- Set per-member cooldown (in-memory + persistent DB)
     local cooldownSecs = GetMissionCooldownSeconds(org.tier, org.level or 1)
-    MissionCooldowns[citizenId] = os.time() + cooldownSecs
+    local cooldownExpires = os.time() + cooldownSecs
+    MissionCooldowns[citizenId] = cooldownExpires
+    MySQL.update.await(
+        'UPDATE uw_members SET mission_cooldown_expires = ? WHERE citizen_id = ? AND org_id = ?',
+        { cooldownExpires, citizenId, org.id }
+    )
 
     TriggerClientEvent('ox_lib:notify', src, {
         type = 'success',

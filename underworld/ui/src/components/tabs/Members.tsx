@@ -1,8 +1,8 @@
 // ============================================================
-// UNDERWORLD — Members Tab
+// UNDERWORLD — Members Tab (v3 — with search + transfer)
 // ============================================================
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useOrgStore } from '../../store/orgStore'
 import { RankBadge } from '../ui/Badge'
 import { Button } from '../ui/Button'
@@ -16,6 +16,8 @@ export function Members() {
   const [salaryTarget, setSalaryTarget] = useState<string | null>(null)
   const [rankValue, setRankValue] = useState(1)
   const [salaryValue, setSalaryValue] = useState(0)
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'rank' | 'contribution' | 'name'>('rank')
 
   if (!data) return null
   const { members, myRank, myCitizenId } = data
@@ -37,13 +39,75 @@ export function Members() {
     setSalaryTarget(null)
   }
 
+  const handleTransfer = (citizenId: string) => {
+    nuiPost('transferLeadership', { citizenId })
+  }
+
+  const filtered = useMemo(() => {
+    let list = [...members]
+
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(m =>
+        m.name.toLowerCase().includes(q) ||
+        (RANK_NAMES[m.rank] ?? '').toLowerCase().includes(q) ||
+        (m.division ?? '').toLowerCase().includes(q)
+      )
+    }
+
+    // Sort
+    if (sortBy === 'contribution') {
+      list.sort((a, b) => b.weekly_contribution - a.weekly_contribution)
+    } else if (sortBy === 'name') {
+      list.sort((a, b) => a.name.localeCompare(b.name))
+    } else {
+      list.sort((a, b) => b.rank - a.rank)
+    }
+
+    return list
+  }, [members, search, sortBy])
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm text-zinc-400">{members.length} member{members.length !== 1 ? 's' : ''}</span>
+      {/* Search + sort bar */}
+      <div className="flex items-center gap-3 mb-1">
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search members..."
+            className="w-full bg-surface-3 border border-white/8 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-accent/60"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
+            >
+              x
+            </button>
+          )}
+        </div>
+        <div className="flex gap-1">
+          {(['rank', 'contribution', 'name'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setSortBy(s)}
+              className={`px-2.5 py-1.5 text-xs rounded-lg border transition-all ${
+                sortBy === s
+                  ? 'border-accent/40 text-accent bg-accent/10'
+                  : 'border-white/8 text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {s === 'contribution' ? 'Earned' : s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+        <span className="text-sm text-zinc-500">{filtered.length}/{members.length}</span>
       </div>
 
-      {members.map(member => {
+      {filtered.map(member => {
         const isMe = member.citizen_id === myCitizenId
         const rankName = RANK_NAMES[member.rank] ?? `Rank ${member.rank}`
         const canAct = canManage && !isMe && member.rank < myRank
@@ -72,10 +136,14 @@ export function Members() {
             </div>
 
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-2 text-xs text-zinc-500">
+            <div className="grid grid-cols-4 gap-2 text-xs text-zinc-500">
               <div>
                 <div className="text-zinc-400 font-medium">{formatMoney(member.weekly_contribution)}</div>
                 <div>This week</div>
+              </div>
+              <div>
+                <div className="text-zinc-400 font-medium">{formatMoney(member.total_contribution)}</div>
+                <div>All time</div>
               </div>
               <div>
                 <div className="text-zinc-400 font-medium">{member.loyalty}%</div>
@@ -143,6 +211,13 @@ export function Members() {
                   )
                 )}
 
+                {/* Transfer leadership */}
+                {isDirektor && member.rank >= 3 && (
+                  <Button size="sm" variant="outline" onClick={() => handleTransfer(member.citizen_id)}>
+                    Transfer Lead
+                  </Button>
+                )}
+
                 {/* Kick */}
                 <Button size="sm" variant="danger" onClick={() => handleKick(member.citizen_id)}>
                   Remove
@@ -152,6 +227,12 @@ export function Members() {
           </div>
         )
       })}
+
+      {filtered.length === 0 && (
+        <div className="text-center py-8 text-zinc-500 text-sm">
+          {search ? 'No members match your search.' : 'No members.'}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 // ============================================================
-// UNDERWORLD — NUI Message Listener Hook
+// UNDERWORLD — NUI Message Listener Hook (v3)
 // ============================================================
 
 import { useEffect } from 'react'
@@ -34,6 +34,13 @@ export function useNUI() {
         case 'closePanel':
           setIsOpen(false)
           setData(null)
+          break
+
+        case 'refreshPanel':
+          if (data) {
+            setData(data as OrgData)
+            // Don't change the active tab — keep user where they are
+          }
           break
 
         case 'openCreation':

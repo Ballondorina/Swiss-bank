@@ -86,7 +86,8 @@ function StartMissionThread()
                         end
 
                         if success then
-                            TriggerServerEvent('underworld:server:missionPickup', activeMission.missionId)
+                            local myPos = GetEntityCoords(ped)
+                            TriggerServerEvent('underworld:server:missionPickup', activeMission.missionId, { x = myPos.x, y = myPos.y, z = myPos.z })
                         else
                             lib.notify({ type = 'error', description = '[MISSION FAILED] You fumbled the pickup.' })
                             TriggerServerEvent('underworld:server:failMission', activeMission.missionId)
@@ -101,7 +102,8 @@ function StartMissionThread()
 
                     if IsControlJustPressed(0, 38) then
                         lib.hideTextUI()
-                        TriggerServerEvent('underworld:server:completeMission', activeMission.missionId)
+                        local myPos = GetEntityCoords(ped)
+                        TriggerServerEvent('underworld:server:completeMission', activeMission.missionId, { x = myPos.x, y = myPos.y, z = myPos.z })
                         break
                     end
                 end

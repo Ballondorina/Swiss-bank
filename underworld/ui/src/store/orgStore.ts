@@ -1,11 +1,11 @@
 // ============================================================
-// UNDERWORLD — Zustand Store
+// UNDERWORLD — Zustand Store (v3)
 // ============================================================
 
 import { create } from 'zustand'
 import type { OrgData, CreationFees } from '../types/org'
 
-type Tab = 'overview' | 'members' | 'missions' | 'territory' | 'vault' | 'ledger' | 'leaderboard'
+export type Tab = 'overview' | 'members' | 'missions' | 'territory' | 'vault' | 'ledger' | 'leaderboard' | 'operations' | 'settings'
 
 interface OrgStore {
   // Panel state

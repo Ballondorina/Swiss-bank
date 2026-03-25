@@ -81,7 +81,180 @@ AddEventHandler('onResourceStart', function(resourceName)
             )
         end
         print(('[UNDERWORLD] Registered %d org stashes.'):format(#orgs))
+
+        -- Restore persistent cooldowns from DB
+        local allMembers = MySQL.query.await(
+            'SELECT citizen_id, mission_cooldown_expires FROM uw_members WHERE mission_cooldown_expires > ?',
+            { os.time() }
+        )
+        if allMembers then
+            for _, m in ipairs(allMembers) do
+                if MissionCooldowns then
+                    MissionCooldowns[m.citizen_id] = m.mission_cooldown_expires
+                end
+            end
+            print(('[UNDERWORLD] Restored %d persistent cooldowns.'):format(#allMembers))
+        end
     end)
+end)
+
+-- ============================================================
+-- TIER UPGRADE — Direktör pays from vault
+-- ============================================================
+
+RegisterNetEvent('underworld:server:upgradeTier', function()
+    local src       = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org or org.rank < 5 then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Only the Direktör can upgrade the tier.' })
+        return
+    end
+
+    local currentTier = org.tier
+    local nextTier    = currentTier + 1
+    local nextConfig  = Config.Tiers[nextTier]
+
+    if not nextConfig then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Already at maximum tier.' })
+        return
+    end
+
+    local cost = nextConfig.price
+    -- Level 8+ gets 10% discount
+    if (org.level or 1) >= 8 then
+        cost = math.floor(cost * 0.9)
+    end
+
+    if org.vault < cost then
+        TriggerClientEvent('ox_lib:notify', src, {
+            type = 'error',
+            description = ('Insufficient vault funds. Need $%s, have $%s.'):format(cost, org.vault)
+        })
+        return
+    end
+
+    MySQL.update.await('UPDATE uw_organizations SET vault = vault - ?, tier = ? WHERE id = ?', { cost, nextTier, org.id })
+    AddLedger(org.id, citizenId, 'tier_upgrade', -cost, ('Tier upgrade: %s → %s'):format(Config.Tiers[currentTier].label, nextConfig.label))
+
+    -- Re-register stash with new tier limits
+    if GetResourceState('ox_inventory') == 'started' then
+        local slots  = GetStashSlots(nextTier, org.level or 1)
+        local weight = GetStashWeight(nextTier)
+        exports.ox_inventory:RegisterStash(
+            ('uw_stash_%d'):format(org.id),
+            ('%s — Org Stash'):format(org.label),
+            slots,
+            weight
+        )
+    end
+
+    NotifyOrg(org.id, {
+        type = 'success',
+        description = ('[ORG] Tier upgraded to %s! New member cap: %s, new stash & mission unlocks.'):format(nextConfig.label, nextConfig.maxMembers)
+    })
+end)
+
+-- ============================================================
+-- TRANSFER LEADERSHIP
+-- ============================================================
+
+RegisterNetEvent('underworld:server:transferLeadership', function(targetCitizenId)
+    local src       = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org or org.rank < 5 then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Only the Direktör can transfer leadership.' })
+        return
+    end
+
+    local target = MySQL.single.await(
+        'SELECT * FROM uw_members WHERE citizen_id = ? AND org_id = ?',
+        { targetCitizenId, org.id }
+    )
+    if not target then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Member not found in your organization.' })
+        return
+    end
+
+    -- Demote current Direktör to Underdirektör, promote target to Direktör
+    MySQL.update.await('UPDATE uw_members SET rank = 4 WHERE citizen_id = ? AND org_id = ?', { citizenId, org.id })
+    MySQL.update.await('UPDATE uw_members SET rank = 5 WHERE citizen_id = ? AND org_id = ?', { targetCitizenId, org.id })
+
+    AddLedger(org.id, citizenId, 'leadership_transfer', 0, ('Leadership transferred to %s'):format(target.name))
+
+    TriggerClientEvent('ox_lib:notify', src, {
+        type = 'success',
+        description = ('Leadership transferred to %s. You are now Underdirektör.'):format(target.name)
+    })
+
+    local targetSrc = GetPlayerByCitizenId(targetCitizenId)
+    if targetSrc then
+        TriggerClientEvent('ox_lib:notify', targetSrc, {
+            type = 'success',
+            description = ('[ORG] You are now the Direktör of %s!'):format(org.label)
+        })
+    end
+end)
+
+-- ============================================================
+-- ANNOUNCEMENTS
+-- ============================================================
+
+RegisterNetEvent('underworld:server:postAnnouncement', function(content, pinned)
+    local src       = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org or org.rank < 4 then
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Rank Underdirektör or higher required.' })
+        return
+    end
+
+    content = tostring(content or ''):sub(1, 500)
+    if #content < 1 then return end
+
+    pinned = pinned and true or false
+
+    -- If pinning, unpin existing
+    if pinned then
+        MySQL.update.await('UPDATE uw_announcements SET pinned = 0 WHERE org_id = ? AND pinned = 1', { org.id })
+    end
+
+    MySQL.insert.await(
+        'INSERT INTO uw_announcements (org_id, author_cid, author_name, content, pinned) VALUES (?, ?, ?, ?, ?)',
+        { org.id, citizenId, GetPlayerName(src), content, pinned and 1 or 0 }
+    )
+
+    NotifyOrg(org.id, { type = 'inform', description = ('[ORG] New announcement posted.') })
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = 'Announcement posted.' })
+end)
+
+RegisterNetEvent('underworld:server:deleteAnnouncement', function(announcementId)
+    local src       = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+
+    local org = GetPlayerOrg(citizenId)
+    if not org or org.rank < 4 then return end
+
+    MySQL.update.await('DELETE FROM uw_announcements WHERE id = ? AND org_id = ?', { announcementId, org.id })
+    TriggerClientEvent('ox_lib:notify', src, { type = 'success', description = 'Announcement deleted.' })
+end)
+
+-- ============================================================
+-- REFRESH PANEL — re-fetches all data without closing
+-- ============================================================
+
+RegisterNetEvent('underworld:server:refreshPanel', function()
+    local src = source
+    -- Just re-trigger the full getOrgData flow
+    TriggerEvent('underworld:server:getOrgData_internal', src)
 end)
 
 -- ============================================================
@@ -133,11 +306,7 @@ end
 -- ORG DATA — fetch full panel payload (extended)
 -- ============================================================
 
-RegisterNetEvent('underworld:server:getOrgData', function()
-    local src       = source
-    local citizenId = GetCitizenId(src)
-    if not citizenId then return end
-
+local function BuildOrgPayload(src, citizenId, isRefresh)
     local org = GetPlayerOrg(citizenId)
     if not org then
         TriggerClientEvent('underworld:client:openPanel', src, nil)
@@ -169,10 +338,19 @@ RegisterNetEvent('underworld:server:getOrgData', function()
     -- XP progress
     local nextLevelXp = XpForNextLevel(org.level or 1)
 
-    -- Per-player cooldown
+    -- Per-player cooldown (check persistent DB first, then in-memory)
     local myCooldownEnds = 0
     if MissionCooldowns and MissionCooldowns[citizenId] then
         myCooldownEnds = MissionCooldowns[citizenId]
+    end
+    -- Also check DB for persistent cooldown
+    local dbCooldown = MySQL.scalar.await(
+        'SELECT mission_cooldown_expires FROM uw_members WHERE citizen_id = ? AND org_id = ?',
+        { citizenId, org.id }
+    ) or 0
+    if dbCooldown > myCooldownEnds then
+        myCooldownEnds = dbCooldown
+        MissionCooldowns[citizenId] = dbCooldown
     end
 
     -- Heat label
@@ -183,10 +361,45 @@ RegisterNetEvent('underworld:server:getOrgData', function()
     elseif heat >= 31 then heatLabel = 'elevated'
     else                   heatLabel = 'normal' end
 
-    -- Leaderboard (build async to not block)
+    -- Leaderboard
     local leaderboard = BuildLeaderboard()
 
-    TriggerClientEvent('underworld:client:openPanel', src, {
+    -- Announcements (latest 10)
+    local announcements = MySQL.query.await(
+        'SELECT * FROM uw_announcements WHERE org_id = ? ORDER BY pinned DESC, created_at DESC LIMIT 10',
+        { org.id }
+    ) or {}
+
+    -- Diplomacy (wars, alliances)
+    local diplomacy = GetDiplomacyData and GetDiplomacyData(org.id) or {}
+
+    -- Votes
+    local votes = GetVotesData and GetVotesData(org.id, citizenId) or {}
+
+    -- Drug labs (for illegal/family orgs)
+    local labData = nil
+    if GetOrgLabData and (org.type == 'illegal' or org.type == 'family') then
+        labData = GetOrgLabData(org.id)
+    end
+
+    -- Store robbery status
+    local robberyData = GetRobberyData and GetRobberyData(org.id) or {}
+
+    -- Territory war window
+    local warWindow = GetWarWindowStatus and GetWarWindowStatus() or {}
+
+    -- Tier upgrade info
+    local nextTier = Config.Tiers[org.tier + 1]
+    local tierUpgradeCost = nil
+    if nextTier then
+        tierUpgradeCost = nextTier.price
+        if (org.level or 1) >= 8 then
+            tierUpgradeCost = math.floor(tierUpgradeCost * 0.9)
+        end
+    end
+
+    local action = isRefresh and 'underworld:client:refreshPanel' or 'underworld:client:openPanel'
+    TriggerClientEvent(action, src, {
         org = {
             id          = org.id,
             name        = org.name,
@@ -205,10 +418,37 @@ RegisterNetEvent('underworld:server:getOrgData', function()
         missions         = missions,
         influence        = influence,
         leaderboard      = leaderboard,
+        announcements    = announcements,
+        diplomacy        = diplomacy,
+        votes            = votes,
+        tierUpgradeCost  = tierUpgradeCost,
+        labData          = labData,
+        robberyData      = robberyData,
+        warWindow        = warWindow,
         myRank           = org.rank,
         myCitizenId      = citizenId,
         myCooldownEnds   = myCooldownEnds
     })
+end
+
+RegisterNetEvent('underworld:server:getOrgData', function()
+    local src       = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+    BuildOrgPayload(src, citizenId, false)
+end)
+
+AddEventHandler('underworld:server:getOrgData_internal', function(src)
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+    BuildOrgPayload(src, citizenId, true)
+end)
+
+RegisterNetEvent('underworld:server:refreshPanel', function()
+    local src       = source
+    local citizenId = GetCitizenId(src)
+    if not citizenId then return end
+    BuildOrgPayload(src, citizenId, true)
 end)
 
 -- ============================================================

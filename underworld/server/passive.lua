@@ -99,6 +99,11 @@ local function ProcessPassiveIncome()
 
     -- Influence decay + zone passive bonuses
     ProcessInfluenceDecay()
+
+    -- Drug lab production
+    if ProcessLabProduction then
+        ProcessLabProduction()
+    end
 end
 
 -- ============================================================

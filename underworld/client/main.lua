@@ -14,6 +14,9 @@ RegisterNetEvent('underworld:client:openPanel', function(data)
     end
     SendNUIMessage({ action = 'openPanel', data = data })
     SetNuiFocus(true, true)
+
+    -- Initialise drug lab + robbery targets from panel data
+    TriggerEvent('underworld:client:initOps', data.labData, data.robberyData)
 end)
 
 -- ============================================================
@@ -96,6 +99,99 @@ RegisterNUICallback('leaveOrg', function(_, cb)
     SetNuiFocus(false, false)
     TriggerServerEvent('underworld:server:leaveOrg')
     cb({})
+end)
+
+-- ============================================================
+-- v3 NUI CALLBACKS — Tier Upgrade, Transfer, Announcements,
+--   Wars, Alliances, Votes, Refresh
+-- ============================================================
+
+RegisterNUICallback('upgradeTier', function(_, cb)
+    TriggerServerEvent('underworld:server:upgradeTier')
+    cb({})
+end)
+
+RegisterNUICallback('transferLeadership', function(data, cb)
+    TriggerServerEvent('underworld:server:transferLeadership', data.citizenId)
+    cb({})
+end)
+
+RegisterNUICallback('postAnnouncement', function(data, cb)
+    TriggerServerEvent('underworld:server:postAnnouncement', data.content, data.pinned)
+    cb({})
+end)
+
+RegisterNUICallback('deleteAnnouncement', function(data, cb)
+    TriggerServerEvent('underworld:server:deleteAnnouncement', data.id)
+    cb({})
+end)
+
+RegisterNUICallback('declareWar', function(data, cb)
+    TriggerServerEvent('underworld:server:declareWar', data.targetOrgId)
+    cb({})
+end)
+
+RegisterNUICallback('respondWar', function(data, cb)
+    TriggerServerEvent('underworld:server:respondWar', data.warId, data.accept)
+    cb({})
+end)
+
+RegisterNUICallback('surrender', function(_, cb)
+    TriggerServerEvent('underworld:server:surrender')
+    cb({})
+end)
+
+RegisterNUICallback('proposeAlliance', function(data, cb)
+    TriggerServerEvent('underworld:server:proposeAlliance', data.targetOrgId)
+    cb({})
+end)
+
+RegisterNUICallback('respondAlliance', function(data, cb)
+    TriggerServerEvent('underworld:server:respondAlliance', data.allianceId, data.accept)
+    cb({})
+end)
+
+RegisterNUICallback('dissolveAlliance', function(data, cb)
+    TriggerServerEvent('underworld:server:dissolveAlliance', data.allianceId)
+    cb({})
+end)
+
+RegisterNUICallback('initiateVote', function(data, cb)
+    TriggerServerEvent('underworld:server:initiateVote', data.voteType, data.targetCitizen, data.description)
+    cb({})
+end)
+
+RegisterNUICallback('castVote', function(data, cb)
+    TriggerServerEvent('underworld:server:castVote', data.voteId, data.voteFor)
+    cb({})
+end)
+
+RegisterNUICallback('refreshPanel', function(_, cb)
+    TriggerServerEvent('underworld:server:refreshPanel')
+    cb({})
+end)
+
+-- ============================================================
+-- DRUG LAB NUI CALLBACKS
+-- ============================================================
+
+RegisterNUICallback('purchaseLab', function(data, cb)
+    TriggerServerEvent('underworld:server:purchaseLab', data.locationId)
+    cb({})
+end)
+
+RegisterNUICallback('shutdownLab', function(data, cb)
+    TriggerServerEvent('underworld:server:shutdownLab', data.labId)
+    cb({})
+end)
+
+-- ============================================================
+-- PANEL REFRESH — re-opens panel with new data (no close/open)
+-- ============================================================
+
+RegisterNetEvent('underworld:client:refreshPanel', function(data)
+    if not data then return end
+    SendNUIMessage({ action = 'refreshPanel', data = data })
 end)
 
 -- ============================================================
