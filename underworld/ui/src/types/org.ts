@@ -150,12 +150,18 @@ export interface DrugLab {
   id: number
   org_id: number
   location_id: number
-  type: string
+  lab_type: string
   type_label: string
+  location_label: string
   stock: number
   max_stock: number
+  units_per_hr: number
+  sell_price: number
+  raw_label: string
+  gather_label: string
+  steps: string[]
   status: 'active' | 'shutdown' | 'raided'
-  production_rate: number  // units/tick
+  is_active: boolean
 }
 
 export interface LabLocation {
@@ -176,11 +182,31 @@ export interface SellPoint {
   coords: { x: number; y: number; z: number }
 }
 
+export interface GatherLocation {
+  id: string
+  label: string
+  drugType: string
+  coords: { x: number; y: number; z: number }
+}
+
+export interface DrugTypeConfig {
+  label: string
+  rawLabel: string
+  gatherLabel: string
+  steps: string[]
+  rawPerGather: number
+  rawToProduct: number
+  sellPricePerUnit: number
+}
+
 export interface LabData {
   labs: DrugLab[]
   availableLocations: LabLocation[]
   sellPoints: SellPoint[]
   maxLabs: number
+  gatherLocations: GatherLocation[]
+  typeConfig: Record<string, DrugTypeConfig>
+  labCost: number
 }
 
 // Operations: Store Robbery
