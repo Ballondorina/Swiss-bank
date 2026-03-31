@@ -805,7 +805,7 @@ end)
 -- ADMIN COMMANDS
 -- ============================================================
 
-RegisterCommand('uwcreateorg', function(source, args)
+RegisterCommand('uwadmincreateorg', function(source, args)
     if source ~= 0 and not IsPlayerAceAllowed(tostring(source), 'command.uwcreateorg') then
         if source ~= 0 then
             TriggerClientEvent('ox_lib:notify', source, { type = 'error', description = 'No permission.' })

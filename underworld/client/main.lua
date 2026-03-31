@@ -9,7 +9,8 @@
 
 RegisterNetEvent('underworld:client:openPanel', function(data)
     if not data then
-        lib.notify({ type = 'error', description = 'You are not part of any organization.' })
+        -- Not in an org — open the creation panel instead
+        TriggerServerEvent('underworld:server:getCreationFees')
         return
     end
     SendNUIMessage({ action = 'openPanel', data = data })
@@ -198,8 +199,19 @@ end)
 -- COMMAND
 -- ============================================================
 
+-- /orgpanel — opens org panel, or creation UI if not in an org
 RegisterCommand('orgpanel', function()
     TriggerServerEvent('underworld:server:getOrgData')
+end, false)
+
+-- /createorg — shortcut to open the org creation panel directly
+RegisterCommand('createorg', function()
+    TriggerServerEvent('underworld:server:getCreationFees')
+end, false)
+
+-- /uwcreateorg — same as /createorg (so the command they know works too)
+RegisterCommand('uwcreateorg', function()
+    TriggerServerEvent('underworld:server:getCreationFees')
 end, false)
 
 -- ============================================================
