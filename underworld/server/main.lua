@@ -84,7 +84,17 @@ AddEventHandler('onResourceStart', function(resourceName)
     if GetResourceState('ox_inventory') ~= 'started' then return end
 
     CreateThread(function()
-        Wait(1000) -- brief wait for ox_inventory to settle
+        -- Wait for MySQL to be ready (check every 500ms for up to 10 seconds)
+        local waited = 0
+        while not MySQL or not MySQL.query or waited > 20 do
+            Wait(500)
+            waited = waited + 1
+        end
+        if waited > 20 then
+            print('[UNDERWORLD] [ERROR] MySQL not available after 10 seconds — stashes not registered')
+            return
+        end
+
         local orgs = MySQL.query.await('SELECT id, label, tier, level FROM uw_organizations')
         if not orgs then return end
         for _, org in ipairs(orgs) do

@@ -95,8 +95,11 @@ local function IsWarWindowActive()
     if not Config.TerritoryWarWindows or not Config.TerritoryWarWindows.enabled then
         return true  -- if not configured, always active
     end
-    local dayOfWeek = tonumber(os.date('%u'))  -- 1=Monday
-    local hour      = tonumber(os.date('%H'))  -- 0-23
+    -- os.date('%w') returns 0=Sunday, 1=Monday, ..., 6=Saturday
+    -- Config.activeDays uses 1=Monday, so shift: %w + 1, but wrap Sunday from 0 to 7
+    local dayOfWeekOs = tonumber(os.date('%w'))  -- 0-6 (0=Sunday)
+    local dayOfWeek   = dayOfWeekOs == 0 and 7 or dayOfWeekOs  -- convert to 1=Monday, 7=Sunday
+    local hour        = tonumber(os.date('%H'))  -- 0-23
 
     local dayAllowed = false
     for _, d in ipairs(Config.TerritoryWarWindows.activeDays) do
