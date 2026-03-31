@@ -7,14 +7,31 @@
 -- HELPERS
 -- ============================================================
 
+-- Supports both QBCore (qb-core) and QBX (qbx_core)
+local function GetQBCorePlayer(src)
+    -- Try QBX first
+    local ok, player = pcall(function()
+        return exports.qbx_core:GetPlayer(src)
+    end)
+    if ok and player then return player end
+
+    -- Fall back to standard QBCore
+    ok, player = pcall(function()
+        return exports['qb-core']:GetPlayer(src)
+    end)
+    if ok and player then return player end
+
+    return nil
+end
+
 local function GetCitizenId(src)
-    local Player = exports.qbx_core:GetPlayer(src)
+    local Player = GetQBCorePlayer(src)
     if not Player then return nil end
     return Player.PlayerData.citizenid
 end
 
 local function GetQBPlayer(src)
-    return exports.qbx_core:GetPlayer(src)
+    return GetQBCorePlayer(src)
 end
 
 local function GetPlayerByCitizenId(citizenId)
@@ -379,7 +396,7 @@ local function BuildOrgPayload(src, citizenId, isRefresh)
     -- Drug labs (for illegal/family orgs)
     local labData = nil
     if GetOrgLabData and (org.type == 'illegal' or org.type == 'family') then
-        labData = GetOrgLabData(org.id)
+        labData = GetOrgLabData(org.id, org.type)
     end
 
     -- Store robbery status
@@ -434,7 +451,11 @@ end
 RegisterNetEvent('underworld:server:getOrgData', function()
     local src       = source
     local citizenId = GetCitizenId(src)
-    if not citizenId then return end
+    if not citizenId then
+        print(('[UNDERWORLD] getOrgData: could not resolve citizenId for src=%d — is qb-core / qbx_core running?'):format(src))
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = '[Underworld] Character data not found. Make sure you are fully spawned in.' })
+        return
+    end
     BuildOrgPayload(src, citizenId, false)
 end)
 
